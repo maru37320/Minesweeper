@@ -5,10 +5,9 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="클래식 지뢰찾기", page_icon="💣", layout="wide")
 
 st.title("💣 리얼 클래식 지뢰찾기")
-st.markdown("**좌클릭:** 탐색 | **우클릭:** 깃발 꽂기 | **숫자 더블클릭:** 주변 8칸 한 번에 열기 (깃발 개수가 맞을 때)")
+st.markdown("**좌클릭:** 탐색 | **우클릭:** 깃발 꽂기 | **좌+우 동시클릭(양클릭):** 주변 8칸 한 번에 열기 (깃발 개수가 맞을 때)")
 
-# --- HTML/JS/CSS를 이용한 완벽한 지뢰찾기 구현 ---
-# 스트림릿의 한계(우클릭 불가, 렌더링 지연)를 극복하기 위해 클라이언트 사이드 로직 사용
+# --- HTML/JS/CSS 지뢰찾기 구현 ---
 minesweeper_html = """
 <!DOCTYPE html>
 <html>
@@ -87,7 +86,7 @@ minesweeper_html = """
     const levels = {
         beginner: { rows: 9, cols: 9, mines: 10 },
         intermediate: { rows: 16, cols: 16, mines: 40 },
-        expert: { rows: 16, cols: 30, mines: 99 } // 폭 30, 높이 16
+        expert: { rows: 16, cols: 30, mines: 99 }
     };
 
     let board = [];
@@ -121,10 +120,9 @@ minesweeper_html = """
                 cellEl.className = 'cell';
                 cellEl.id = `cell-${r}-${c}`;
                 
-                // 마우스 이벤트 등록
+                // 마우스 이벤트 등록 (더블클릭 제거, mousedown에서 양클릭 감지)
                 cellEl.addEventListener('mousedown', (e) => handleMouseDown(e, r, c));
                 cellEl.addEventListener('contextmenu', (e) => { e.preventDefault(); }); // 기본 우클릭 메뉴 방지
-                cellEl.addEventListener('dblclick', (e) => handleDoubleClick(r, c)); // 더블클릭으로 주변 열기(Chording)
 
                 boardEl.appendChild(cellEl);
             }
@@ -132,27 +130,32 @@ minesweeper_html = """
         }
     }
 
-    // 마우스 좌/우 클릭 처리
+    // 마우스 좌/우 동시 클릭 처리
     function handleMouseDown(e, r, c) {
         if (isGameOver) return;
-        // 우클릭 (버튼 2)
+        
+        // e.buttons가 3이면 좌클릭(1) + 우클릭(2)이 동시에 눌린 상태를 의미함 (Chording)
+        if (e.buttons === 3) {
+            handleChording(r, c);
+            return;
+        }
+
+        // 우클릭 단독 (버튼 2)
         if (e.button === 2) {
             toggleFlag(r, c);
         } 
-        // 좌클릭 (버튼 0)
+        // 좌클릭 단독 (버튼 0)
         else if (e.button === 0) {
             revealCell(r, c);
         }
     }
 
-    // 구글 스타일: 첫 클릭 시 주변 8칸도 지뢰가 없도록 배치
     function placeMinesSafe(firstR, firstC) {
         let placed = 0;
         while (placed < currentLevel.mines) {
             let r = Math.floor(Math.random() * currentLevel.rows);
             let c = Math.floor(Math.random() * currentLevel.cols);
             
-            // 첫 클릭 위치와 그 주변 8칸에는 지뢰 생성 안 함
             let isSafeZone = Math.abs(r - firstR) <= 1 && Math.abs(c - firstC) <= 1;
             
             if (!board[r][c].isMine && !isSafeZone) {
@@ -206,7 +209,6 @@ minesweeper_html = """
             cellEl.innerText = cell.neighborMines;
             cellEl.classList.add(`num-${cell.neighborMines}`);
         } else {
-            // 빈 칸이면 주변 8칸 연쇄 오픈 (Flood Fill)
             for (let i = -1; i <= 1; i++) {
                 for (let j = -1; j <= 1; j++) {
                     revealCell(r + i, c + j);
@@ -233,10 +235,12 @@ minesweeper_html = """
         document.getElementById('status').innerText = `남은 지뢰: ${currentLevel.mines - flagsPlaced}`;
     }
 
-    // 더블클릭: 주변 지뢰 수와 깃발 수가 같으면 남은 칸 한 번에 오픈 (Chording)
-    function handleDoubleClick(r, c) {
+    // 양클릭(Chording): 주변 지뢰 수와 깃발 수가 같으면 남은 칸 한 번에 오픈
+    function handleChording(r, c) {
         if (isGameOver) return;
         let cell = board[r][c];
+        
+        // 이미 열려있고, 주변 지뢰 개수가 1 이상인 숫자 칸에서만 작동
         if (!cell.isRevealed || cell.neighborMines === 0) return;
 
         let flagCount = 0;
@@ -249,6 +253,7 @@ minesweeper_html = """
             }
         }
 
+        // 꽂혀있는 깃발 수와 칸에 적힌 숫자가 같으면 주변 칸 모두 열기
         if (flagCount === cell.neighborMines) {
             for (let i = -1; i <= 1; i++) {
                 for (let j = -1; j <= 1; j++) {
@@ -270,7 +275,6 @@ minesweeper_html = """
             document.getElementById('status').style.color = "blue";
         } else {
             document.getElementById('status').innerText = "💥 게임 오버! 💥";
-            // 모든 지뢰 공개
             for (let r = 0; r < currentLevel.rows; r++) {
                 for (let c = 0; c < currentLevel.cols; c++) {
                     if (board[r][c].isMine && !board[r][c].isFlagged) {
@@ -295,12 +299,11 @@ minesweeper_html = """
         }
     }
 
-    // 초기 실행
     window.onload = initGame;
 </script>
 </body>
 </html>
 """
 
-# HTML을 스트림릿 화면에 꽉 차게 렌더링 (높이를 충분히 주어 짤림 방지)
+# HTML 렌더링
 components.html(minesweeper_html, height=800, scrolling=True)
