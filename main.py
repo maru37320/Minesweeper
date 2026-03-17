@@ -79,7 +79,6 @@ minesweeper_html = """
         box-shadow: inset 1px 1px 3px rgba(0,0,0,0.1); 
     }
     
-    /* 숫자별 색상 */
     .num-1 { color: #0000ff; } .num-2 { color: #008000; } .num-3 { color: #ff0000; }
     .num-4 { color: #000080; } .num-5 { color: #800000; } .num-6 { color: #008080; }
     .num-7 { color: #000000; } .num-8 { color: #808080; }
@@ -95,7 +94,7 @@ minesweeper_html = """
     .modal-content {
         background-color: white; padding: 30px; border-radius: 12px;
         box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-        text-align: center; min-width: 350px; max-height: 80vh; overflow-y: auto;
+        text-align: center; min-width: 400px; max-height: 80vh; overflow-y: auto;
     }
     .modal-content h2 { margin-top: 0; color: #333; }
     .modal-content input {
@@ -104,16 +103,27 @@ minesweeper_html = """
     }
     .modal-btn { background-color: #1976d2; color: white; border: none; }
     .modal-btn:hover { background-color: #115293; }
-    .close-btn { background-color: #d32f2f; color: white; border: none; margin-top: 15px; }
+    .close-btn { background-color: #d32f2f; color: white; border: none; margin-top: 20px; }
     .close-btn:hover { background-color: #9a0007; }
 
+    /* 랭킹 탭 버튼 디자인 */
+    .tab-container {
+        display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;
+    }
+    .tab-btn {
+        padding: 8px 20px; border: none; border-radius: 5px; cursor: pointer;
+        font-weight: bold; background-color: #e0e0e0; color: #333; transition: 0.2s;
+    }
+    .tab-btn:hover { background-color: #d5d5d5; }
+    .tab-btn.active { background-color: #1976d2; color: white; } /* 선택된 탭 강조 */
+
     /* 랭킹 테이블 디자인 */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: center; }
-    th { background-color: #f2f2f2; color: #333; }
-    .rank-1 { font-weight: bold; color: #d4af37; } /* 금메달 색상 */
-    .rank-2 { font-weight: bold; color: #c0c0c0; } /* 은메달 색상 */
-    .rank-3 { font-weight: bold; color: #cd7f32; } /* 동메달 색상 */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: center; }
+    th { background-color: #f2f2f2; color: #333; font-size: 15px; }
+    .rank-1 { font-weight: bold; color: #d4af37; background-color: #fffdf5; } 
+    .rank-2 { font-weight: bold; color: #a0a0a0; background-color: #fafafa; } 
+    .rank-3 { font-weight: bold; color: #cd7f32; background-color: #fffaf5; } 
 </style>
 </head>
 <body>
@@ -144,8 +154,15 @@ minesweeper_html = """
 </div>
 
 <div id="ranking-modal" class="modal-overlay">
-    <div class="modal-content" style="min-width: 450px;">
-        <h2>🏆 난이도별 명예의 전당</h2>
+    <div class="modal-content">
+        <h2>🏆 명예의 전당</h2>
+        
+        <div class="tab-container">
+            <button id="tab-beginner" class="tab-btn" onclick="renderRankingTable('beginner')">초급</button>
+            <button id="tab-intermediate" class="tab-btn" onclick="renderRankingTable('intermediate')">중급</button>
+            <button id="tab-expert" class="tab-btn" onclick="renderRankingTable('expert')">고급</button>
+        </div>
+
         <div id="ranking-boards"></div>
         <button class="close-btn" onclick="closeModal('ranking-modal')">닫기</button>
     </div>
@@ -179,48 +196,55 @@ minesweeper_html = """
         
         let ranks = getRanks();
         ranks[currentLevel.id].push({ name: name, time: seconds });
-        // 시간(초)이 짧은 순서대로 오름차순 정렬
         ranks[currentLevel.id].sort((a, b) => a.time - b.time);
-        // 최대 10위까지만 저장
         ranks[currentLevel.id] = ranks[currentLevel.id].slice(0, 10);
         
         localStorage.setItem('minesweeper_ranks', JSON.stringify(ranks));
         
         closeModal('name-modal');
-        showRanking(); // 등록 후 바로 랭킹창 보여주기
+        showRanking(); 
     }
 
+    // 랭킹 모달 열기 (기본값으로 현재 플레이 중인 난이도를 보여줌)
     function showRanking() {
+        document.getElementById('ranking-modal').style.display = 'flex';
+        renderRankingTable(currentLevel.id);
+    }
+
+    // 💡 선택한 난이도의 랭킹만 테이블로 그려주는 함수
+    function renderRankingTable(diffId) {
+        // 탭 버튼 활성화 디자인 처리
+        ['beginner', 'intermediate', 'expert'].forEach(id => {
+            document.getElementById(`tab-${id}`).classList.remove('active');
+        });
+        document.getElementById(`tab-${diffId}`).classList.add('active');
+
         let ranks = getRanks();
-        let html = "";
+        let html = `<h3>[ ${levels[diffId].name} ]</h3>`;
+        html += `<table><tr><th width="25%">순위</th><th width="45%">닉네임</th><th width="30%">기록</th></tr>`;
         
-        for (let diffId of ['beginner', 'intermediate', 'expert']) {
-            html += `<h3>${levels[diffId].name}</h3>`;
-            html += `<table><tr><th width="20%">순위</th><th width="50%">닉네임</th><th width="30%">기록</th></tr>`;
-            
-            let data = ranks[diffId];
-            if (data.length === 0) {
-                html += `<tr><td colspan="3" style="color:#777;">아직 기록이 없습니다. 도전하세요!</td></tr>`;
-            } else {
-                data.forEach((entry, idx) => {
-                    let rankClass = "";
-                    let medal = idx + 1;
-                    if (idx === 0) { rankClass = "rank-1"; medal = "🥇 1"; }
-                    else if (idx === 1) { rankClass = "rank-2"; medal = "🥈 2"; }
-                    else if (idx === 2) { rankClass = "rank-3"; medal = "🥉 3"; }
-                    
-                    html += `<tr class="${rankClass}">
-                                <td>${medal}</td>
-                                <td>${entry.name}</td>
-                                <td>${entry.time}초</td>
-                             </tr>`;
-                });
-            }
-            html += `</table>`;
+        let data = ranks[diffId];
+        if (data.length === 0) {
+            html += `<tr><td colspan="3" style="color:#777; padding: 20px;">아직 기록이 없습니다.<br>첫 번째 기록의 주인공이 되세요!</td></tr>`;
+        } else {
+            data.forEach((entry, idx) => {
+                let rankClass = "";
+                let medal = idx + 1;
+                if (idx === 0) { rankClass = "rank-1"; medal = "🥇 1위"; }
+                else if (idx === 1) { rankClass = "rank-2"; medal = "🥈 2위"; }
+                else if (idx === 2) { rankClass = "rank-3"; medal = "🥉 3위"; }
+                else { medal = `${idx + 1}위`; }
+                
+                html += `<tr class="${rankClass}">
+                            <td>${medal}</td>
+                            <td>${entry.name}</td>
+                            <td>${entry.time}초</td>
+                         </tr>`;
+            });
         }
+        html += `</table>`;
         
         document.getElementById('ranking-boards').innerHTML = html;
-        document.getElementById('ranking-modal').style.display = 'flex';
     }
 
     function closeModal(modalId) {
@@ -427,10 +451,9 @@ minesweeper_html = """
             document.getElementById('status').innerText = "🎉 승리! 🎉";
             document.getElementById('status').style.color = "#1976d2";
             
-            // 승리 시 닉네임 입력 모달 띄우기 (0.5초 딜레이 주어 보드 변화 확인 후)
             setTimeout(() => {
                 document.getElementById('clear-record').innerText = `기록: ${seconds}초 (${currentLevel.name})`;
-                document.getElementById('player-name').value = ''; // 초기화
+                document.getElementById('player-name').value = ''; 
                 document.getElementById('name-modal').style.display = 'flex';
                 document.getElementById('player-name').focus();
             }, 500);
@@ -472,5 +495,4 @@ minesweeper_html = """
 </html>
 """
 
-# HTML을 렌더링 (모달창이 화면 전체를 덮을 수 있도록 높이를 넉넉하게)
 components.html(minesweeper_html, height=1000, scrolling=True)
