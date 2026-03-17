@@ -53,9 +53,7 @@ minesweeper_html = """
     #timer { color: #1976d2; min-width: 100px; text-align: center; }
 
     #board {
-        /* JS에서 테두리 두께를 조절할 CSS 변수 세팅 */
         --cell-border: 3px; 
-        
         display: grid;
         background-color: #9e9e9e; 
         border: 4px solid #808080;
@@ -64,11 +62,10 @@ minesweeper_html = """
         box-shadow: 0 8px 16px rgba(0,0,0,0.2);
     }
     
-    /* 🧱 안 열린 블럭: 동적 테두리 두께 적용 */
     .cell {
         box-sizing: border-box;
         background-color: #c0c0c0; 
-        border: var(--cell-border) outset #f4f4f4; /* 👈 난이도마다 자동으로 테두리가 굵어짐! */
+        border: var(--cell-border) outset #f4f4f4; 
         display: flex;
         align-items: center;
         justify-content: center;
@@ -76,7 +73,6 @@ minesweeper_html = """
         cursor: pointer;
     }
     
-    /* 🕳️ 열린 바닥: 파인 느낌 */
     .cell.revealed {
         border: 1px solid #9e9e9e;
         background-color: #e8ecef; 
@@ -113,7 +109,7 @@ minesweeper_html = """
     const levels = {
         beginner: { rows: 9, cols: 9, mines: 10, cellSize: 50 },       
         intermediate: { rows: 16, cols: 16, mines: 40, cellSize: 35 }, 
-        expert: { rows: 16, cols: 30, mines: 99, cellSize: 25 }        
+        expert: { rows: 16, cols: 30, mines: 99, cellSize: 35 } // 👈 고급 모드 블럭 크기를 25에서 35로 확 키웠어! 
     };
 
     let board = [];
@@ -143,7 +139,7 @@ minesweeper_html = """
         const boardEl = document.getElementById('board');
         boardEl.style.gridTemplateColumns = `repeat(${currentLevel.cols}, ${currentLevel.cellSize}px)`;
         
-        // 💡 핵심: 블럭 크기의 약 12% 비율로 테두리 두께를 동적으로 설정!
+        // 동적 테두리 크기 계산 (크기가 커졌으니 고급도 테두리가 도톰해짐!)
         const borderSize = Math.max(2, Math.floor(currentLevel.cellSize * 0.12));
         boardEl.style.setProperty('--cell-border', `${borderSize}px`);
         
@@ -362,4 +358,5 @@ minesweeper_html = """
 </html>
 """
 
-components.html(minesweeper_html, height=850, scrolling=True)
+# HTML을 렌더링할 때 고급 모드 사이즈에 맞게 높이를 살짝 더 여유 있게 잡아줌
+components.html(minesweeper_html, height=900, scrolling=True)
