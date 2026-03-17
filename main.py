@@ -5,7 +5,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="클래식 지뢰찾기", page_icon="💣", layout="wide")
 
 st.title("💣 리얼 클래식 지뢰찾기")
-st.markdown("**좌클릭:** 탐색 | **우클릭:** 깃발 꽂기 | **좌+우 동시클릭(양클릭):** 주변 8칸 한 번에 열기 (깃발 개수가 맞을 때)")
+st.markdown("**좌클릭:** 탐색 | **우클릭:** 깃발 꽂기 | **좌+우 동시클릭(양클릭):** 주변 8칸 한 번에 열기")
 
 # --- HTML/JS/CSS 지뢰찾기 구현 ---
 minesweeper_html = """
@@ -13,36 +13,57 @@ minesweeper_html = """
 <html>
 <head>
 <style>
+    /* 웹사이트 배경은 깔끔하고 밝게 변경 */
     body {
-        font-family: sans-serif;
-        background-color: #bdbdbd;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #f0f2f6; /* 스트림릿 기본 배경색과 유사한 깔끔한 색상 */
         display: flex;
         flex-direction: column;
         align-items: center;
         padding: 20px;
         user-select: none;
     }
+    
+    /* 컨트롤 패널(드롭다운, 버튼, 점수판) 디자인 개선 */
     #controls {
-        margin-bottom: 20px;
+        background-color: white;
+        padding: 15px 25px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-bottom: 25px;
         display: flex;
-        gap: 15px;
+        gap: 20px;
         align-items: center;
     }
     select, button {
-        padding: 5px 10px;
+        padding: 8px 15px;
         font-size: 16px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
         cursor: pointer;
+        background-color: #ffffff;
+        transition: 0.2s;
     }
+    button:hover, select:hover {
+        background-color: #e9ecef;
+    }
+    .info-text {
+        font-weight: bold;
+        font-size: 18px;
+    }
+    #status { color: #d32f2f; min-width: 120px; text-align: center; }
+    #timer { color: #1976d2; min-width: 100px; text-align: center; }
+
+    /* 보드판 내부만 클래식한 회색 유지 */
     #board {
         display: grid;
-        background-color: #7b7b7b;
-        border: 3px solid #808080;
+        background-color: #bdbdbd;
+        border: 4px solid #808080;
         border-top-color: #ffffff;
         border-left-color: #ffffff;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
     }
     .cell {
-        width: 25px;
-        height: 25px;
         box-sizing: border-box;
         background-color: #bdbdbd;
         border: 3px outset #f0f0f0;
@@ -50,14 +71,13 @@ minesweeper_html = """
         align-items: center;
         justify-content: center;
         font-weight: bold;
-        font-size: 16px;
         cursor: pointer;
     }
     .cell.revealed {
         border: 1px solid #7b7b7b;
         background-color: #bdbdbd;
     }
-    /* 숫자별 색상 (공식 지뢰찾기 기준) */
+    /* 숫자별 색상 */
     .num-1 { color: blue; }
     .num-2 { color: green; }
     .num-3 { color: red; }
@@ -72,21 +92,23 @@ minesweeper_html = """
 
 <div id="controls">
     <select id="difficulty" onchange="initGame()">
-        <option value="beginner">초급 (9x9, 지뢰 10개)</option>
-        <option value="intermediate">중급 (16x16, 지뢰 40개)</option>
-        <option value="expert">고급 (30x16, 지뢰 99개)</option>
+        <option value="beginner">초급 (9x9)</option>
+        <option value="intermediate">중급 (16x16)</option>
+        <option value="expert">고급 (30x16)</option>
     </select>
     <button onclick="initGame()">🔄 재시작</button>
-    <div id="status" style="font-weight: bold; font-size: 18px; color: red;"></div>
+    <div id="status" class="info-text">🚩 남은 지뢰: 0</div>
+    <div id="timer" class="info-text">⏱️ 0초</div>
 </div>
 
 <div id="board"></div>
 
 <script>
+    // 난이도별 설정: cellSize 속성을 추가하여 블록 크기를 다르게 적용
     const levels = {
-        beginner: { rows: 9, cols: 9, mines: 10 },
-        intermediate: { rows: 16, cols: 16, mines: 40 },
-        expert: { rows: 16, cols: 30, mines: 99 }
+        beginner: { rows: 9, cols: 9, mines: 10, cellSize: 50 },       // 크고 시원시원하게
+        intermediate: { rows: 16, cols: 16, mines: 40, cellSize: 35 }, // 적당한 크기
+        expert: { rows: 16, cols: 30, mines: 99, cellSize: 25 }        // 한 화면에 들어오도록 작게
     };
 
     let board = [];
@@ -94,6 +116,10 @@ minesweeper_html = """
     let isGameOver = false;
     let isFirstClick = true;
     let flagsPlaced = 0;
+    
+    // 타이머 관련 변수
+    let timerInterval = null;
+    let seconds = 0;
 
     function initGame() {
         const diff = document.getElementById('difficulty').value;
@@ -102,27 +128,37 @@ minesweeper_html = """
         isGameOver = false;
         isFirstClick = true;
         flagsPlaced = 0;
-        document.getElementById('status').innerText = `남은 지뢰: ${currentLevel.mines}`;
+        
+        // 타이머 초기화
+        stopTimer();
+        seconds = 0;
+        document.getElementById('timer').innerText = `⏱️ 0초`;
+        
+        document.getElementById('status').innerText = `🚩 남은 지뢰: ${currentLevel.mines}`;
+        document.getElementById('status').style.color = "#d32f2f";
         
         const boardEl = document.getElementById('board');
-        boardEl.style.gridTemplateColumns = `repeat(${currentLevel.cols}, 25px)`;
+        // 난이도에 맞는 블록 크기로 그리드 설정
+        boardEl.style.gridTemplateColumns = `repeat(${currentLevel.cols}, ${currentLevel.cellSize}px)`;
         boardEl.innerHTML = '';
 
         for (let r = 0; r < currentLevel.rows; r++) {
             let row = [];
             for (let c = 0; c < currentLevel.cols; c++) {
-                let cell = {
-                    r: r, c: c, isMine: false, isRevealed: false, isFlagged: false, neighborMines: 0
-                };
+                let cell = { r: r, c: c, isMine: false, isRevealed: false, isFlagged: false, neighborMines: 0 };
                 row.push(cell);
 
                 let cellEl = document.createElement('div');
                 cellEl.className = 'cell';
                 cellEl.id = `cell-${r}-${c}`;
                 
-                // 마우스 이벤트 등록 (더블클릭 제거, mousedown에서 양클릭 감지)
+                // 블록 크기와 글자 크기를 동적으로 설정
+                cellEl.style.width = `${currentLevel.cellSize}px`;
+                cellEl.style.height = `${currentLevel.cellSize}px`;
+                cellEl.style.fontSize = `${currentLevel.cellSize * 0.55}px`; 
+                
                 cellEl.addEventListener('mousedown', (e) => handleMouseDown(e, r, c));
-                cellEl.addEventListener('contextmenu', (e) => { e.preventDefault(); }); // 기본 우클릭 메뉴 방지
+                cellEl.addEventListener('contextmenu', (e) => { e.preventDefault(); });
 
                 boardEl.appendChild(cellEl);
             }
@@ -130,22 +166,32 @@ minesweeper_html = """
         }
     }
 
-    // 마우스 좌/우 동시 클릭 처리
+    function startTimer() {
+        if (timerInterval !== null) return;
+        timerInterval = setInterval(() => {
+            seconds++;
+            document.getElementById('timer').innerText = `⏱️ ${seconds}초`;
+        }, 1000);
+    }
+
+    function stopTimer() {
+        if (timerInterval !== null) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+    }
+
     function handleMouseDown(e, r, c) {
         if (isGameOver) return;
         
-        // e.buttons가 3이면 좌클릭(1) + 우클릭(2)이 동시에 눌린 상태를 의미함 (Chording)
         if (e.buttons === 3) {
             handleChording(r, c);
             return;
         }
 
-        // 우클릭 단독 (버튼 2)
         if (e.button === 2) {
             toggleFlag(r, c);
-        } 
-        // 좌클릭 단독 (버튼 0)
-        else if (e.button === 0) {
+        } else if (e.button === 0) {
             revealCell(r, c);
         }
     }
@@ -191,6 +237,7 @@ minesweeper_html = """
 
         if (isFirstClick) {
             placeMinesSafe(r, c);
+            startTimer(); // 첫 클릭 시 타이머 시작
             isFirstClick = false;
         }
 
@@ -232,15 +279,13 @@ minesweeper_html = """
             cellEl.innerText = '🚩';
             flagsPlaced++;
         }
-        document.getElementById('status').innerText = `남은 지뢰: ${currentLevel.mines - flagsPlaced}`;
+        document.getElementById('status').innerText = `🚩 남은 지뢰: ${currentLevel.mines - flagsPlaced}`;
     }
 
-    // 양클릭(Chording): 주변 지뢰 수와 깃발 수가 같으면 남은 칸 한 번에 오픈
     function handleChording(r, c) {
         if (isGameOver) return;
         let cell = board[r][c];
         
-        // 이미 열려있고, 주변 지뢰 개수가 1 이상인 숫자 칸에서만 작동
         if (!cell.isRevealed || cell.neighborMines === 0) return;
 
         let flagCount = 0;
@@ -253,7 +298,6 @@ minesweeper_html = """
             }
         }
 
-        // 꽂혀있는 깃발 수와 칸에 적힌 숫자가 같으면 주변 칸 모두 열기
         if (flagCount === cell.neighborMines) {
             for (let i = -1; i <= 1; i++) {
                 for (let j = -1; j <= 1; j++) {
@@ -270,11 +314,15 @@ minesweeper_html = """
 
     function gameOver(win) {
         isGameOver = true;
+        stopTimer(); // 게임 종료 시 타이머 정지
+        
         if (win) {
-            document.getElementById('status').innerText = "🎉 승리했습니다! 🎉";
-            document.getElementById('status').style.color = "blue";
+            document.getElementById('status').innerText = "🎉 승리! 🎉";
+            document.getElementById('status').style.color = "#1976d2";
         } else {
             document.getElementById('status').innerText = "💥 게임 오버! 💥";
+            document.getElementById('status').style.color = "red";
+            
             for (let r = 0; r < currentLevel.rows; r++) {
                 for (let c = 0; c < currentLevel.cols; c++) {
                     if (board[r][c].isMine && !board[r][c].isFlagged) {
@@ -305,5 +353,4 @@ minesweeper_html = """
 </html>
 """
 
-# HTML 렌더링
-components.html(minesweeper_html, height=800, scrolling=True)
+components.html(minesweeper_html, height=850, scrolling=True)
