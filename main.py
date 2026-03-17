@@ -13,10 +13,9 @@ minesweeper_html = """
 <html>
 <head>
 <style>
-    /* 웹사이트 배경은 깔끔하고 밝게 변경 */
     body {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background-color: #f0f2f6; /* 스트림릿 기본 배경색과 유사한 깔끔한 색상 */
+        background-color: #f0f2f6; 
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -24,7 +23,6 @@ minesweeper_html = """
         user-select: none;
     }
     
-    /* 컨트롤 패널(드롭다운, 버튼, 점수판) 디자인 개선 */
     #controls {
         background-color: white;
         padding: 15px 25px;
@@ -54,38 +52,46 @@ minesweeper_html = """
     #status { color: #d32f2f; min-width: 120px; text-align: center; }
     #timer { color: #1976d2; min-width: 100px; text-align: center; }
 
-    /* 보드판 내부만 클래식한 회색 유지 */
     #board {
+        /* JS에서 테두리 두께를 조절할 CSS 변수 세팅 */
+        --cell-border: 3px; 
+        
         display: grid;
-        background-color: #bdbdbd;
+        background-color: #9e9e9e; 
         border: 4px solid #808080;
         border-top-color: #ffffff;
         border-left-color: #ffffff;
         box-shadow: 0 8px 16px rgba(0,0,0,0.2);
     }
+    
+    /* 🧱 안 열린 블럭: 동적 테두리 두께 적용 */
     .cell {
         box-sizing: border-box;
-        background-color: #bdbdbd;
-        border: 3px outset #f0f0f0;
+        background-color: #c0c0c0; 
+        border: var(--cell-border) outset #f4f4f4; /* 👈 난이도마다 자동으로 테두리가 굵어짐! */
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: bold;
         cursor: pointer;
     }
+    
+    /* 🕳️ 열린 바닥: 파인 느낌 */
     .cell.revealed {
-        border: 1px solid #7b7b7b;
-        background-color: #bdbdbd;
+        border: 1px solid #9e9e9e;
+        background-color: #e8ecef; 
+        box-shadow: inset 1px 1px 3px rgba(0,0,0,0.1); 
     }
+    
     /* 숫자별 색상 */
-    .num-1 { color: blue; }
-    .num-2 { color: green; }
-    .num-3 { color: red; }
-    .num-4 { color: darkblue; }
-    .num-5 { color: darkred; }
-    .num-6 { color: teal; }
-    .num-7 { color: black; }
-    .num-8 { color: gray; }
+    .num-1 { color: #0000ff; }
+    .num-2 { color: #008000; }
+    .num-3 { color: #ff0000; }
+    .num-4 { color: #000080; }
+    .num-5 { color: #800000; }
+    .num-6 { color: #008080; }
+    .num-7 { color: #000000; }
+    .num-8 { color: #808080; }
 </style>
 </head>
 <body>
@@ -104,11 +110,10 @@ minesweeper_html = """
 <div id="board"></div>
 
 <script>
-    // 난이도별 설정: cellSize 속성을 추가하여 블록 크기를 다르게 적용
     const levels = {
-        beginner: { rows: 9, cols: 9, mines: 10, cellSize: 50 },       // 크고 시원시원하게
-        intermediate: { rows: 16, cols: 16, mines: 40, cellSize: 35 }, // 적당한 크기
-        expert: { rows: 16, cols: 30, mines: 99, cellSize: 25 }        // 한 화면에 들어오도록 작게
+        beginner: { rows: 9, cols: 9, mines: 10, cellSize: 50 },       
+        intermediate: { rows: 16, cols: 16, mines: 40, cellSize: 35 }, 
+        expert: { rows: 16, cols: 30, mines: 99, cellSize: 25 }        
     };
 
     let board = [];
@@ -117,7 +122,6 @@ minesweeper_html = """
     let isFirstClick = true;
     let flagsPlaced = 0;
     
-    // 타이머 관련 변수
     let timerInterval = null;
     let seconds = 0;
 
@@ -129,7 +133,6 @@ minesweeper_html = """
         isFirstClick = true;
         flagsPlaced = 0;
         
-        // 타이머 초기화
         stopTimer();
         seconds = 0;
         document.getElementById('timer').innerText = `⏱️ 0초`;
@@ -138,8 +141,12 @@ minesweeper_html = """
         document.getElementById('status').style.color = "#d32f2f";
         
         const boardEl = document.getElementById('board');
-        // 난이도에 맞는 블록 크기로 그리드 설정
         boardEl.style.gridTemplateColumns = `repeat(${currentLevel.cols}, ${currentLevel.cellSize}px)`;
+        
+        // 💡 핵심: 블럭 크기의 약 12% 비율로 테두리 두께를 동적으로 설정!
+        const borderSize = Math.max(2, Math.floor(currentLevel.cellSize * 0.12));
+        boardEl.style.setProperty('--cell-border', `${borderSize}px`);
+        
         boardEl.innerHTML = '';
 
         for (let r = 0; r < currentLevel.rows; r++) {
@@ -152,7 +159,6 @@ minesweeper_html = """
                 cellEl.className = 'cell';
                 cellEl.id = `cell-${r}-${c}`;
                 
-                // 블록 크기와 글자 크기를 동적으로 설정
                 cellEl.style.width = `${currentLevel.cellSize}px`;
                 cellEl.style.height = `${currentLevel.cellSize}px`;
                 cellEl.style.fontSize = `${currentLevel.cellSize * 0.55}px`; 
@@ -237,7 +243,7 @@ minesweeper_html = """
 
         if (isFirstClick) {
             placeMinesSafe(r, c);
-            startTimer(); // 첫 클릭 시 타이머 시작
+            startTimer();
             isFirstClick = false;
         }
 
@@ -247,7 +253,7 @@ minesweeper_html = """
 
         if (cell.isMine) {
             cellEl.innerText = '💣';
-            cellEl.style.backgroundColor = 'red';
+            cellEl.style.backgroundColor = '#ff4d4d';
             gameOver(false);
             return;
         }
@@ -314,7 +320,7 @@ minesweeper_html = """
 
     function gameOver(win) {
         isGameOver = true;
-        stopTimer(); // 게임 종료 시 타이머 정지
+        stopTimer();
         
         if (win) {
             document.getElementById('status').innerText = "🎉 승리! 🎉";
@@ -329,6 +335,9 @@ minesweeper_html = """
                         let el = document.getElementById(`cell-${r}-${c}`);
                         el.classList.add('revealed');
                         el.innerText = '💣';
+                    } else if (!board[r][c].isMine && board[r][c].isFlagged) {
+                        let el = document.getElementById(`cell-${r}-${c}`);
+                        el.innerText = '❌';
                     }
                 }
             }
