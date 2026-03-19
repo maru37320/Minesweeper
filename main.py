@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="글로벌 랭킹 지뢰찾기", page_icon="🌍", layout="wide")
 
 st.title("🌍 궁극의 지뢰찾기 (모바일 완벽 지원!)")
-st.markdown("**PC:** 좌클릭(탐색) / 우클릭(깃발) / 좌우 동시 클릭(주변 열기)<br>**모바일:** 터치(스마트 팝업 메뉴) / 힌트 사용 시 기록 +15초 페널티!", unsafe_allow_html=True)
+st.markdown("**PC:** 좌클릭(탐색) / 우클릭(깃발) / 좌우 동시 클릭(주변 열기)<br>**모바일:** 터치(스마트 팝업 메뉴) / 더블 터치(블럭 부수기 or 주변 열기)", unsafe_allow_html=True)
 
 minesweeper_html = """
 <!DOCTYPE html>
@@ -161,7 +161,7 @@ minesweeper_html = """
     <div class="modal-content">
         <h2>🎉 지뢰찾기 클리어! 🎉</h2>
         <p id="clear-record" class="info-text" style="color: #4caf50;"></p>
-        <p>전 세계 명예의 전당에 등록할 닉네임을 입력하세요!<br><small>(같은 닉네임은 최고 기록 하나만 랭킹에 노출됩니다)</small></p>
+        <p>전 세계 명예의 전당에 등록할 닉네임을 입력하세요!</p>
         <input type="text" id="player-name" placeholder="닉네임 (최대 10자)" maxlength="10">
         <button id="save-btn" class="modal-btn" onclick="saveScore()">랭킹 등록</button>
     </div>
@@ -198,6 +198,7 @@ minesweeper_html = """
     let flagsPlaced = 0; let timerInterval = null; let seconds = 0;
     let isMobileMode = false; 
     let activeMenuCell = null; 
+    let lastTap = { r: -1, c: -1, time: 0 }; // 🚨 더블 터치 감지용 변수 추가
     
     let currentNickname = null;
     try { currentNickname = localStorage.getItem('minesweeper_nickname'); } catch(e) {}
@@ -236,12 +237,12 @@ minesweeper_html = """
         let saveBtn = document.getElementById('save-btn');
         saveBtn.innerText = "서버에 저장 중... 📡"; saveBtn.disabled = true;
         
-        let platformTag = isMobileMode ? "📱" : "💻";
-        let taggedName = name + platformTag; 
+        // 🚨 이모지 꼼수를 없애고, 실제 서버의 모바일/PC 난이도 키값으로 바로 전송!
+        let actualLevelId = isMobileMode ? `${currentLevel.id}_mobile` : currentLevel.id;
         let timestamp = new Date().getTime();
 
         try {
-            let url = `${SCRIPT_URL}?action=write&level=${currentLevel.id}&name=${encodeURIComponent(taggedName)}&time=${seconds}&t=${timestamp}`;
+            let url = `${SCRIPT_URL}?action=write&level=${actualLevelId}&name=${encodeURIComponent(name)}&time=${seconds}&t=${timestamp}`;
             await fetch(url);
         } catch (error) {
             console.error(error); alert("서버 연결에 실패했습니다.");
@@ -278,17 +279,14 @@ minesweeper_html = """
         document.getElementById(`tab-${diffId}`).classList.add('active');
         if (!globalRanksCache) return;
         
-        let ranks = globalRanksCache[diffId] || []; 
-        let filteredRanks = ranks.filter(entry => {
-            let isMob = entry.name.includes('📱');
-            return currentRankPlatform === 'mobile' ? isMob : !isMob;
-        });
+        // 🚨 서버에서 필터링된 배열을 바로 가져와서 사용! (이모지 검사 삭제)
+        let targetKey = currentRankPlatform === 'pc' ? diffId : `${diffId}_mobile`;
+        let ranks = globalRanksCache[targetKey] || [];
         
         let bestRecords = {};
-        filteredRanks.forEach(entry => {
-            let cleanName = entry.name.replace('📱', '').replace('💻', '');
-            if (!bestRecords[cleanName] || bestRecords[cleanName] > entry.time) {
-                bestRecords[cleanName] = entry.time;
+        ranks.forEach(entry => {
+            if (!bestRecords[entry.name] || bestRecords[entry.name] > entry.time) {
+                bestRecords[entry.name] = entry.time;
             }
         });
         
@@ -450,12 +448,29 @@ minesweeper_html = """
         if (isGameOver) return;
         e.stopPropagation(); 
 
+        let now = new Date().getTime();
+        let isDoubleTap = (lastTap.r === r && lastTap.c === c && (now - lastTap.time) < 300); // 0.3초 내 연속 클릭 감지
+        lastTap = { r: r, c: c, time: now };
+
         if (!isMobileMode) {
             if (e.button === 0) revealCell(r, c); 
             return;
         }
 
         let cell = board[r][c];
+
+        // 🚨 모바일 더블 터치 전용 액션!
+        if (isDoubleTap) {
+            if (cell.isRevealed) {
+                handleChording(r, c); // 열린 칸 두 번 터치 -> 주변 8칸 열기
+            } else {
+                closeMobileMenu();
+                revealCell(r, c); // 안 열린 칸 두 번 터치 -> 블럭 바로 부수기
+            }
+            return;
+        }
+
+        // 싱글 터치 액션 (팝업 메뉴 띄우기)
         if (cell.isRevealed) {
             closeMobileMenu(); 
             return;
@@ -486,35 +501,28 @@ minesweeper_html = """
         let cellEl = document.getElementById(`cell-${r}-${c}`);
         let rect = cellEl.getBoundingClientRect();
         
-        // 🚨 픽셀 기준이 아니라, 맵의 '좌표(r, c)'를 통해 모서리를 100% 정확하게 인식!
         let isLeftEdge = (c === 0);
         let isRightEdge = (c === currentLevel.cols - 1);
         let isTopEdge = (r === 0);
 
-        // 기본값: 블럭 위쪽에 가로로 정렬
         let top = rect.top + window.scrollY - 55; 
         let left = rect.left + window.scrollX + (rect.width / 2);
         let transform = 'translateX(-50%)';
         let flexDir = 'row';
 
         if (isLeftEdge && !isTopEdge) {
-            // ⬅️ 왼쪽 모서리 블럭: 팝업을 오른쪽(세로)으로!
             flexDir = 'column';
             top = rect.top + window.scrollY + (rect.height / 2);
             left = rect.right + window.scrollX + 8;
             transform = 'translateY(-50%)';
         } else if (isRightEdge && !isTopEdge) {
-            // ➡️ 오른쪽 모서리 블럭: 팝업을 왼쪽(세로)으로!
             flexDir = 'column';
             top = rect.top + window.scrollY + (rect.height / 2);
             left = rect.left + window.scrollX - 57; 
             transform = 'translateY(-50%)';
         } else if (isTopEdge) {
-            // ⬆️ 위쪽 모서리 블럭: 팝업을 아래쪽(가로)으로!
             flexDir = 'row';
             top = rect.bottom + window.scrollY + 8;
-            
-            // 모서리 밖으로 안 나가게 디테일 위치 조정
             if (isLeftEdge) {
                 left = rect.left + window.scrollX;
                 transform = 'none'; 
