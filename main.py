@@ -238,8 +238,6 @@ minesweeper_html = """
         
         let platformTag = isMobileMode ? "📱" : "💻";
         let taggedName = name + platformTag; 
-        
-        // 🚨 타임스탬프(?t=)를 붙여서 브라우저 캐시 무시하고 무조건 서버에 전송/반영하도록 수정!
         let timestamp = new Date().getTime();
 
         try {
@@ -259,7 +257,6 @@ minesweeper_html = """
         document.getElementById('ranking-modal').style.display = 'flex'; 
         document.getElementById('ranking-boards').innerHTML = '<h3 style="margin:40px 0; color:#1976d2;">📡 글로벌 랭킹 통신 중...</h3>';
         try {
-            // 🚨 랭킹 불러올 때도 캐시 무시 (항상 최신 데이터 로드)
             let response = await fetch(`${SCRIPT_URL}?t=${new Date().getTime()}`);
             globalRanksCache = await response.json();
             renderRankingTable(currentLevel.id);
@@ -282,7 +279,6 @@ minesweeper_html = """
         if (!globalRanksCache) return;
         
         let ranks = globalRanksCache[diffId] || []; 
-        
         let filteredRanks = ranks.filter(entry => {
             let isMob = entry.name.includes('📱');
             return currentRankPlatform === 'mobile' ? isMob : !isMob;
@@ -403,7 +399,6 @@ minesweeper_html = """
         document.getElementById('timer').innerText = `⏱️ 0초`;
         document.getElementById('status').innerText = `🚩 남은 지뢰: ${currentLevel.mines}`;
         
-        // 🚨 화면 이탈 방지! 모바일 모드 시 터치하기 적절하면서도 가출하지 않는 고정 크기(32px) 적용
         let finalCellSize = isMobileMode ? 32 : currentLevel.cellSize;
 
         const boardEl = document.getElementById('board');
@@ -419,10 +414,8 @@ minesweeper_html = """
                 cellEl.style.width = cellEl.style.height = `${finalCellSize}px`;
                 cellEl.style.fontSize = `${finalCellSize * 0.55}px`; 
                 
-                // 🚨 [PC 전용] 좌우 동시 클릭 (Chording) 적용
                 cellEl.addEventListener('mousedown', (e) => {
                     if (isMobileMode || isGameOver) return;
-                    // e.buttons === 3 은 왼쪽(1) + 오른쪽(2) 버튼이 둘 다 눌려있음을 의미함!
                     if (e.buttons === 3) handleChording(r, c);
                 });
 
@@ -430,11 +423,9 @@ minesweeper_html = """
                 
                 cellEl.addEventListener('contextmenu', (e) => {
                     e.preventDefault(); 
-                    // 동시 클릭(e.buttons === 3) 중이 아닐 때만 깃발 꽂기
                     if (!isMobileMode && !isGameOver && e.buttons !== 3) toggleFlag(r, c);
                 });
                 
-                // 더블클릭 이벤트 제거됨 (이제 동시클릭으로 작동)
                 boardEl.appendChild(cellEl);
             }
             board.push(row);
@@ -495,34 +486,42 @@ minesweeper_html = """
         let cellEl = document.getElementById(`cell-${r}-${c}`);
         let rect = cellEl.getBoundingClientRect();
         
-        // 🚨 화면 끝부분 터치 시 팝업창 위치 스마트 계산 알고리즘 
-        let isLeftEdge = rect.left < 60;
-        let isRightEdge = window.innerWidth - rect.right < 60;
-        let isTopEdge = rect.top < 70;
+        // 🚨 픽셀 기준이 아니라, 맵의 '좌표(r, c)'를 통해 모서리를 100% 정확하게 인식!
+        let isLeftEdge = (c === 0);
+        let isRightEdge = (c === currentLevel.cols - 1);
+        let isTopEdge = (r === 0);
 
-        let top = rect.top + window.scrollY - 60; 
+        // 기본값: 블럭 위쪽에 가로로 정렬
+        let top = rect.top + window.scrollY - 55; 
         let left = rect.left + window.scrollX + (rect.width / 2);
         let transform = 'translateX(-50%)';
         let flexDir = 'row';
 
-        if (isLeftEdge) {
-            // 왼쪽 모서리: 버튼들을 세로로, 셀의 오른쪽에 배치
+        if (isLeftEdge && !isTopEdge) {
+            // ⬅️ 왼쪽 모서리 블럭: 팝업을 오른쪽(세로)으로!
             flexDir = 'column';
-            left = rect.right + window.scrollX + 5;
             top = rect.top + window.scrollY + (rect.height / 2);
+            left = rect.right + window.scrollX + 8;
             transform = 'translateY(-50%)';
-        } else if (isRightEdge) {
-            // 오른쪽 모서리: 버튼들을 세로로, 셀의 왼쪽에 배치
+        } else if (isRightEdge && !isTopEdge) {
+            // ➡️ 오른쪽 모서리 블럭: 팝업을 왼쪽(세로)으로!
             flexDir = 'column';
-            left = rect.left + window.scrollX - 60; // 메뉴 폭만큼 빼줌
             top = rect.top + window.scrollY + (rect.height / 2);
+            left = rect.left + window.scrollX - 57; 
             transform = 'translateY(-50%)';
         } else if (isTopEdge) {
-            // 위쪽 모서리: 버튼들을 가로로, 셀의 아래쪽에 배치
+            // ⬆️ 위쪽 모서리 블럭: 팝업을 아래쪽(가로)으로!
             flexDir = 'row';
-            top = rect.bottom + window.scrollY + 10;
-            left = rect.left + window.scrollX + (rect.width / 2);
-            transform = 'translateX(-50%)';
+            top = rect.bottom + window.scrollY + 8;
+            
+            // 모서리 밖으로 안 나가게 디테일 위치 조정
+            if (isLeftEdge) {
+                left = rect.left + window.scrollX;
+                transform = 'none'; 
+            } else if (isRightEdge) {
+                left = rect.right + window.scrollX;
+                transform = 'translateX(-100%)'; 
+            }
         }
 
         menu.style.flexDirection = flexDir;
