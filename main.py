@@ -157,7 +157,6 @@ minesweeper_html = """
 </div>
 
 <script>
-    // 💡 네가 발급받은 구글 앱스 스크립트 주소!
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyIhXW_fY1O0jZbPCj0-DFV9tO740ScI4fnHU4fs5wZez91UI64e_gUCEBxbAt9oFoL/exec";
 
     const levels = {
@@ -168,35 +167,31 @@ minesweeper_html = """
 
     let board = []; let currentLevel; let isGameOver = false; let isFirstClick = true; 
     let flagsPlaced = 0; let timerInterval = null; let seconds = 0;
-    let currentNickname = localStorage.getItem('minesweeper_nickname') || null;
-    let audioCtx = null; let soundEnabled = true;
-    let globalRanksCache = null;
+    
+    let currentNickname = null;
+    try { currentNickname = localStorage.getItem('minesweeper_nickname'); } catch(e) {}
+    
+    let audioCtx = null; let soundEnabled = true; let globalRanksCache = null;
 
-    // --- 🌍 구글 스프레드시트 글로벌 랭킹 시스템 ---
     async function saveScore(autoName = null) {
         let name = autoName || document.getElementById('player-name').value.trim() || "이름없는고수";
         if (!autoName) {
             currentNickname = name;
-            localStorage.setItem('minesweeper_nickname', name); // 닉네임만 브라우저에 저장
+            try { localStorage.setItem('minesweeper_nickname', name); } catch(e) {}
         }
         
         let saveBtn = document.getElementById('save-btn');
-        saveBtn.innerText = "서버에 저장 중... 📡";
-        saveBtn.disabled = true;
+        saveBtn.innerText = "서버에 저장 중... 📡"; saveBtn.disabled = true;
 
         try {
-            // 구글 서버로 데이터 전송 (fetch)
             let url = `${SCRIPT_URL}?action=write&level=${currentLevel.id}&name=${encodeURIComponent(name)}&time=${seconds}`;
             await fetch(url);
         } catch (error) {
-            console.error(error);
-            alert("서버 연결에 실패했습니다. 구글 시트를 확인해주세요.");
+            console.error(error); alert("서버 연결에 실패했습니다. 구글 시트를 확인해주세요.");
         }
         
-        saveBtn.innerText = "랭킹 등록";
-        saveBtn.disabled = false;
-        closeModal('name-modal'); 
-        showRanking(); 
+        saveBtn.innerText = "랭킹 등록"; saveBtn.disabled = false;
+        closeModal('name-modal'); showRanking(); 
     }
 
     async function showRanking() { 
@@ -207,7 +202,6 @@ minesweeper_html = """
             let response = await fetch(SCRIPT_URL);
             globalRanksCache = await response.json();
         } catch (error) {
-            console.error(error);
             document.getElementById('ranking-boards').innerHTML = '<p style="color:red;">랭킹 데이터를 불러오지 못했습니다.</p>';
             return;
         }
@@ -217,12 +211,10 @@ minesweeper_html = """
     function renderRankingTable(diffId) {
         ['beginner', 'intermediate', 'expert'].forEach(id => document.getElementById(`tab-${id}`).classList.remove('active'));
         document.getElementById(`tab-${diffId}`).classList.add('active');
-
         if (!globalRanksCache) return;
         let ranks = globalRanksCache[diffId] || [];
         
         let html = `<h3>[ ${levels[diffId].name} ]</h3><table><tr><th>순위</th><th>닉네임</th><th>기록</th></tr>`;
-        
         if (ranks.length === 0) {
             html += `<tr><td colspan="3">아직 기록이 없습니다. 첫 1위의 주인공이 되어보세요!</td></tr>`;
         } else {
@@ -238,46 +230,52 @@ minesweeper_html = """
 
     function resetNickname() { 
         currentNickname = null; 
-        localStorage.removeItem('minesweeper_nickname');
-        alert("내 닉네임이 초기화되었습니다. 다음 클리어 시 새로 입력할 수 있습니다."); 
+        try { localStorage.removeItem('minesweeper_nickname'); } catch(e) {}
+        alert("내 닉네임이 초기화되었습니다."); 
     }
 
-    // --- 기존 사운드 및 게임 기능 ---
     function toggleSound() {
         soundEnabled = !soundEnabled;
         document.getElementById('btn-sound').innerText = soundEnabled ? '🔊 소리 켜짐' : '🔇 소리 꺼짐';
-        if (soundEnabled && !audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
 
+    // 🚨 여기서 에러가 났었어! try-catch로 안전하게 감쌌어.
     function playSound(type) {
         if (!soundEnabled) return;
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        let now = audioCtx.currentTime;
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            let now = audioCtx.currentTime;
 
-        if (type === 'reveal') {
-            osc.type = 'sine'; osc.frequency.setValueAtTime(800, now);
-            gain.gain.setValueAtTime(0.05, now); gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-            osc.start(now); osc.stop(now + 0.1);
-        } else if (type === 'flag') {
-            osc.type = 'square'; osc.frequency.setValueAtTime(400, now);
-            gain.gain.setValueAtTime(0.05, now); gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-            osc.start(now); osc.stop(now + 0.1);
-        } else if (type === 'bomb') {
-            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now);
-            osc.frequency.exponentialRampToValueAtTime(10, now + 0.5);
-            gain.gain.setValueAtTime(0.2, now); gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-            osc.start(now); osc.stop(now + 0.5);
-        } else if (type === 'win') {
-            [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
-                let o = audioCtx.createOscillator(); let g = audioCtx.createGain();
-                o.type = 'sine'; o.frequency.value = freq;
-                o.connect(g); g.connect(audioCtx.destination);
-                g.gain.setValueAtTime(0.1, now + i*0.1); g.gain.exponentialRampToValueAtTime(0.001, now + i*0.1 + 0.3);
-                o.start(now + i*0.1); o.stop(now + i*0.1 + 0.3);
-            });
+            if (type === 'reveal') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, now);
+                gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'flag') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(400, now);
+                gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'bomb') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(10, now + 0.5);
+                gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
+            } else if (type === 'win') {
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                    let o = audioCtx.createOscillator(); let g = audioCtx.createGain();
+                    o.type = 'sine'; o.frequency.value = freq;
+                    o.connect(g); g.connect(audioCtx.destination);
+                    g.gain.setValueAtTime(0.1, now + i*0.1); g.gain.exponentialRampToValueAtTime(0.001, now + i*0.1 + 0.3);
+                    o.start(now + i*0.1); o.stop(now + i*0.1 + 0.3);
+                });
+            }
+        } catch (e) {
+            console.warn("오디오 재생 실패 (무시됨):", e);
         }
     }
 
@@ -342,7 +340,6 @@ minesweeper_html = """
 
     function startTimer() {
         if (timerInterval !== null) return;
-        if (soundEnabled && !audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         timerInterval = setInterval(() => { seconds++; document.getElementById('timer').innerText = `⏱️ ${seconds}초`; }, 1000);
     }
     function stopTimer() { if (timerInterval) clearInterval(timerInterval); timerInterval = null; }
@@ -370,7 +367,8 @@ minesweeper_html = """
         }
     }
 
-    function revealCell(r, c) {
+    // 🚨 연쇄 폭발 시 소리가 중첩되어 뻗지 않도록 isAuto 파라미터 추가!
+    function revealCell(r, c, isAuto = false) {
         if (r < 0 || r >= currentLevel.rows || c < 0 || c >= currentLevel.cols) return;
         let cell = board[r][c]; if (cell.isRevealed || cell.isFlagged || isGameOver) return;
         if (isFirstClick) { placeMinesSafe(r, c); startTimer(); isFirstClick = false; }
@@ -383,13 +381,14 @@ minesweeper_html = """
             gameOver(false); return;
         }
 
-        playSound('reveal');
+        if (!isAuto) playSound('reveal'); // 자동 오픈일 땐 소리 스킵
+
         if (cell.neighborMines > 0) {
             cellEl.innerText = cell.neighborMines; cellEl.classList.add(`num-${cell.neighborMines}`);
         } else {
-            for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) revealCell(r + i, c + j);
+            for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) revealCell(r + i, c + j, true);
         }
-        checkWin();
+        if (!isAuto) checkWin();
     }
 
     function toggleFlag(r, c) {
@@ -410,7 +409,7 @@ minesweeper_html = """
         if (flagCount === cell.neighborMines) {
             for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
                 let nr = r + i, nc = c + j;
-                if (nr >= 0 && nr < currentLevel.rows && nc >= 0 && nc < currentLevel.cols && !board[nr][nc].isFlagged && !board[nr][nc].isRevealed) revealCell(nr, nc);
+                if (nr >= 0 && nr < currentLevel.rows && nc >= 0 && nc < currentLevel.cols && !board[nr][nc].isFlagged && !board[nr][nc].isRevealed) revealCell(nr, nc); // 여긴 사용자가 클릭한 효과이므로 소리 재생
             }
         }
     }
