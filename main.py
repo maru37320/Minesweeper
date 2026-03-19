@@ -94,12 +94,12 @@ minesweeper_html = """
     body.theme-dark .num-1 { color: #64b5f6; } body.theme-dark .num-2 { color: #81c784; } 
     body.theme-dark .num-3 { color: #e57373; } body.theme-dark .num-4 { color: #9575cd; }
 
-    /* 📱 모바일 팝업 메뉴 (개선됨) */
+    /* 📱 모바일 팝업 메뉴 */
     .mobile-menu {
-        position: absolute; /* 보드 밖으로 잘리지 않게 body에 붙임 */
+        position: absolute; 
         background-color: #333; padding: 6px; border-radius: 8px;
         display: flex; gap: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 1000;
-        transform: translateX(-50%); /* 중심 정렬 */
+        transform: translateX(-50%);
         animation: popUp 0.15s ease-out forwards;
     }
     .mobile-btn {
@@ -131,7 +131,7 @@ minesweeper_html = """
     .confetti { position: fixed; z-index: 9999; pointer-events: none; }
 </style>
 </head>
-<body class="theme-light" onclick="closeMobileMenu(event)">
+<body class="theme-light">
 
 <div class="toolbar">
     <select id="difficulty" onchange="initGame()">
@@ -206,11 +206,25 @@ minesweeper_html = """
     let audioCtx = null; let soundEnabled = true; let globalRanksCache = null;
     let currentRankPlatform = 'pc'; let currentRankDiff = 'beginner';
 
+    document.addEventListener('touchstart', function(e) {
+        if (e.target.closest('.mobile-menu') || e.target.closest('.cell')) return; 
+        closeMobileMenu();
+    }, {passive: true});
+
+    document.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.mobile-menu') || e.target.closest('.cell')) return; 
+        closeMobileMenu();
+    });
+
+    // 🚨 핵심 수정 부분: 모드를 전환할 때마다 initGame()을 호출해서 판을 엎어버림!
     function toggleDeviceMode() {
         isMobileMode = !isMobileMode;
         document.getElementById('btn-mode').innerText = isMobileMode ? '📱 모바일 모드' : '💻 PC 모드';
         document.getElementById('btn-mode').style.backgroundColor = isMobileMode ? '#e91e63' : '#9c27b0';
-        closeMobileMenu();
+        
+        // 🚨 유저에게 알리고 게임 초기화!
+        alert("모드가 변경되어 게임이 다시 시작됩니다! 🔄");
+        initGame(); 
     }
 
     async function saveScore(autoName = null) {
@@ -389,7 +403,6 @@ minesweeper_html = """
                 cellEl.style.width = cellEl.style.height = `${currentLevel.cellSize}px`;
                 cellEl.style.fontSize = `${currentLevel.cellSize * 0.55}px`; 
                 
-                // 터치 겹침 버그를 막기 위해 통합된 click 이벤트 하나만 사용
                 cellEl.addEventListener('click', (e) => handleInteraction(e, r, c));
                 cellEl.addEventListener('contextmenu', (e) => {
                     e.preventDefault(); 
@@ -409,8 +422,7 @@ minesweeper_html = """
     }
     function stopTimer() { if (timerInterval) clearInterval(timerInterval); timerInterval = null; }
 
-    function closeMobileMenu(e) {
-        if (e && e.target && e.target.closest('.mobile-menu')) return;
+    function closeMobileMenu() {
         let existingMenu = document.getElementById('mobile-menu-popup');
         if (existingMenu) {
             existingMenu.remove();
@@ -420,8 +432,6 @@ minesweeper_html = """
 
     function handleInteraction(e, r, c) {
         if (isGameOver) return;
-        
-        // 🚨 핵심 포인트 1: 이벤트 버블링 차단! 빈 공간을 누른 걸로 오해해서 팝업이 바로 닫히는 걸 막아줌
         e.stopPropagation(); 
 
         if (!isMobileMode) {
@@ -452,23 +462,19 @@ minesweeper_html = """
 
         menu.appendChild(btnDig); menu.appendChild(btnFlag);
         
-        // 🚨 핵심 포인트 2: 팝업창을 셀 내부가 아니라 화면 최상위(body)에 붙임! (가려짐 방지)
         document.body.appendChild(menu);
         activeMenuCell = {r, c};
 
-        // 🚨 핵심 포인트 3: 셀의 위치를 파악해서 팝업창 좌표를 유동적으로 밀어줌
         let cellEl = document.getElementById(`cell-${r}-${c}`);
         let rect = cellEl.getBoundingClientRect();
         
-        let top = rect.top + window.scrollY - 55; // 기본은 블럭 위쪽
-        let left = rect.left + window.scrollX + (rect.width / 2); // 기본은 블럭 중앙
+        let top = rect.top + window.scrollY - 55; 
+        let left = rect.left + window.scrollX + (rect.width / 2); 
 
-        // 위쪽 가장자리라면 팝업을 블럭 아래로
         if (rect.top < 60) {
             top = rect.bottom + window.scrollY + 10; 
         }
         
-        // 좌우 가장자리라면 화면 밖으로 나가지 않게 제한
         let menuHalfWidth = 50; 
         if (left < menuHalfWidth + 10) left = menuHalfWidth + 10;
         if (left > window.innerWidth - menuHalfWidth - 10) left = window.innerWidth - menuHalfWidth - 10;
