@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="글로벌 랭킹 지뢰찾기", page_icon="🌍", layout="wide")
 
 st.title("🌍 궁극의 지뢰찾기 (모바일 완벽 지원!)")
-st.markdown("**PC:** 좌클릭(탐색) / 우클릭(깃발) / 더블클릭(주변 열기)<br>**모바일:** 터치(팝업 메뉴) / 더블터치(주변 열기)<br>**힌트 사용 시 기록 +15초 페널티!**", unsafe_allow_html=True)
+st.markdown("**PC:** 좌클릭(탐색) / 우클릭(깃발) / 좌우 동시 클릭(주변 열기)<br>**모바일:** 터치(스마트 팝업 메뉴) / 힌트 사용 시 기록 +15초 페널티!", unsafe_allow_html=True)
 
 minesweeper_html = """
 <!DOCTYPE html>
@@ -94,21 +94,20 @@ minesweeper_html = """
     body.theme-dark .num-1 { color: #64b5f6; } body.theme-dark .num-2 { color: #81c784; } 
     body.theme-dark .num-3 { color: #e57373; } body.theme-dark .num-4 { color: #9575cd; }
 
-    /* 📱 모바일 팝업 메뉴 */
+    /* 📱 스마트 모바일 팝업 메뉴 */
     .mobile-menu {
         position: absolute; 
         background-color: #333; padding: 6px; border-radius: 8px;
         display: flex; gap: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 1000;
-        transform: translateX(-50%);
-        animation: popUp 0.15s ease-out forwards;
+        animation: popFade 0.15s ease-out forwards;
     }
     .mobile-btn {
         width: 45px; height: 45px; border-radius: 50%; border: none; font-size: 22px;
         background-color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
-        touch-action: manipulation;
+        touch-action: manipulation; flex-shrink: 0;
     }
     .mobile-btn:active { background-color: #ddd; }
-    @keyframes popUp { from { opacity: 0; transform: translate(-50%, 5px) scale(0.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+    @keyframes popFade { from { opacity: 0; } to { opacity: 1; } }
 
     /* 모달 디자인 */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 2000; justify-content: center; align-items: center; }
@@ -197,8 +196,6 @@ minesweeper_html = """
 
     let board = []; let currentLevel; let isGameOver = false; let isFirstClick = true; 
     let flagsPlaced = 0; let timerInterval = null; let seconds = 0;
-    
-    // 🚨 첫 로드 시 화면 크기나 기기 정보로 모바일 모드 자동 감지!
     let isMobileMode = false; 
     let activeMenuCell = null; 
     
@@ -232,19 +229,21 @@ minesweeper_html = """
     async function saveScore(autoName = null) {
         let name = autoName || document.getElementById('player-name').value.trim() || "이름없는고수";
         if (!autoName) {
-            currentNickname = name; // 내 기기에는 순수 닉네임만 저장
+            currentNickname = name; 
             try { localStorage.setItem('minesweeper_nickname', name); } catch(e) {}
         }
         
         let saveBtn = document.getElementById('save-btn');
         saveBtn.innerText = "서버에 저장 중... 📡"; saveBtn.disabled = true;
         
-        // 🚨 시트 이름은 그대로 두고, 닉네임 뒤에 몰래 태그를 붙여서 서버로 전송 (구글 시트 에러 방지)
         let platformTag = isMobileMode ? "📱" : "💻";
         let taggedName = name + platformTag; 
+        
+        // 🚨 타임스탬프(?t=)를 붙여서 브라우저 캐시 무시하고 무조건 서버에 전송/반영하도록 수정!
+        let timestamp = new Date().getTime();
 
         try {
-            let url = `${SCRIPT_URL}?action=write&level=${currentLevel.id}&name=${encodeURIComponent(taggedName)}&time=${seconds}`;
+            let url = `${SCRIPT_URL}?action=write&level=${currentLevel.id}&name=${encodeURIComponent(taggedName)}&time=${seconds}&t=${timestamp}`;
             await fetch(url);
         } catch (error) {
             console.error(error); alert("서버 연결에 실패했습니다.");
@@ -260,7 +259,8 @@ minesweeper_html = """
         document.getElementById('ranking-modal').style.display = 'flex'; 
         document.getElementById('ranking-boards').innerHTML = '<h3 style="margin:40px 0; color:#1976d2;">📡 글로벌 랭킹 통신 중...</h3>';
         try {
-            let response = await fetch(SCRIPT_URL);
+            // 🚨 랭킹 불러올 때도 캐시 무시 (항상 최신 데이터 로드)
+            let response = await fetch(`${SCRIPT_URL}?t=${new Date().getTime()}`);
             globalRanksCache = await response.json();
             renderRankingTable(currentLevel.id);
         } catch (error) {
@@ -281,9 +281,8 @@ minesweeper_html = """
         document.getElementById(`tab-${diffId}`).classList.add('active');
         if (!globalRanksCache) return;
         
-        let ranks = globalRanksCache[diffId] || []; // 이제 시트 탭은 난이도별 3개만 사용함
+        let ranks = globalRanksCache[diffId] || []; 
         
-        // 🚨 프론트엔드에서 태그를 확인해서 PC/모바일 분리! (과거 기록은 태그가 없으므로 PC로 간주)
         let filteredRanks = ranks.filter(entry => {
             let isMob = entry.name.includes('📱');
             return currentRankPlatform === 'mobile' ? isMob : !isMob;
@@ -291,7 +290,6 @@ minesweeper_html = """
         
         let bestRecords = {};
         filteredRanks.forEach(entry => {
-            // 태그를 지우고 순수 닉네임만 추출
             let cleanName = entry.name.replace('📱', '').replace('💻', '');
             if (!bestRecords[cleanName] || bestRecords[cleanName] > entry.time) {
                 bestRecords[cleanName] = entry.time;
@@ -405,8 +403,8 @@ minesweeper_html = """
         document.getElementById('timer').innerText = `⏱️ 0초`;
         document.getElementById('status').innerText = `🚩 남은 지뢰: ${currentLevel.mines}`;
         
-        // 🚨 모바일 모드일 때는 셀 크기를 1.5배 이상(최소 48px)으로 확 키워서 터치하기 쉽게 만듦!
-        let finalCellSize = isMobileMode ? Math.max(currentLevel.cellSize * 1.5, 48) : currentLevel.cellSize;
+        // 🚨 화면 이탈 방지! 모바일 모드 시 터치하기 적절하면서도 가출하지 않는 고정 크기(32px) 적용
+        let finalCellSize = isMobileMode ? 32 : currentLevel.cellSize;
 
         const boardEl = document.getElementById('board');
         boardEl.style.gridTemplateColumns = `repeat(${currentLevel.cols}, ${finalCellSize}px)`;
@@ -421,13 +419,22 @@ minesweeper_html = """
                 cellEl.style.width = cellEl.style.height = `${finalCellSize}px`;
                 cellEl.style.fontSize = `${finalCellSize * 0.55}px`; 
                 
+                // 🚨 [PC 전용] 좌우 동시 클릭 (Chording) 적용
+                cellEl.addEventListener('mousedown', (e) => {
+                    if (isMobileMode || isGameOver) return;
+                    // e.buttons === 3 은 왼쪽(1) + 오른쪽(2) 버튼이 둘 다 눌려있음을 의미함!
+                    if (e.buttons === 3) handleChording(r, c);
+                });
+
                 cellEl.addEventListener('click', (e) => handleInteraction(e, r, c));
+                
                 cellEl.addEventListener('contextmenu', (e) => {
                     e.preventDefault(); 
-                    if (!isMobileMode && !isGameOver) toggleFlag(r, c);
+                    // 동시 클릭(e.buttons === 3) 중이 아닐 때만 깃발 꽂기
+                    if (!isMobileMode && !isGameOver && e.buttons !== 3) toggleFlag(r, c);
                 });
-                cellEl.addEventListener('dblclick', (e) => { e.preventDefault(); handleChording(r, c); });
                 
+                // 더블클릭 이벤트 제거됨 (이제 동시클릭으로 작동)
                 boardEl.appendChild(cellEl);
             }
             board.push(row);
@@ -482,26 +489,46 @@ minesweeper_html = """
         btnFlag.onclick = (ev) => { ev.stopPropagation(); closeMobileMenu(); toggleFlag(r, c); };
 
         menu.appendChild(btnDig); menu.appendChild(btnFlag);
-        
         document.body.appendChild(menu);
         activeMenuCell = {r, c};
 
         let cellEl = document.getElementById(`cell-${r}-${c}`);
         let rect = cellEl.getBoundingClientRect();
         
-        let top = rect.top + window.scrollY - 65; 
-        let left = rect.left + window.scrollX + (rect.width / 2); 
+        // 🚨 화면 끝부분 터치 시 팝업창 위치 스마트 계산 알고리즘 
+        let isLeftEdge = rect.left < 60;
+        let isRightEdge = window.innerWidth - rect.right < 60;
+        let isTopEdge = rect.top < 70;
 
-        if (rect.top < 70) {
-            top = rect.bottom + window.scrollY + 10; 
+        let top = rect.top + window.scrollY - 60; 
+        let left = rect.left + window.scrollX + (rect.width / 2);
+        let transform = 'translateX(-50%)';
+        let flexDir = 'row';
+
+        if (isLeftEdge) {
+            // 왼쪽 모서리: 버튼들을 세로로, 셀의 오른쪽에 배치
+            flexDir = 'column';
+            left = rect.right + window.scrollX + 5;
+            top = rect.top + window.scrollY + (rect.height / 2);
+            transform = 'translateY(-50%)';
+        } else if (isRightEdge) {
+            // 오른쪽 모서리: 버튼들을 세로로, 셀의 왼쪽에 배치
+            flexDir = 'column';
+            left = rect.left + window.scrollX - 60; // 메뉴 폭만큼 빼줌
+            top = rect.top + window.scrollY + (rect.height / 2);
+            transform = 'translateY(-50%)';
+        } else if (isTopEdge) {
+            // 위쪽 모서리: 버튼들을 가로로, 셀의 아래쪽에 배치
+            flexDir = 'row';
+            top = rect.bottom + window.scrollY + 10;
+            left = rect.left + window.scrollX + (rect.width / 2);
+            transform = 'translateX(-50%)';
         }
-        
-        let menuHalfWidth = 55; 
-        if (left < menuHalfWidth + 10) left = menuHalfWidth + 10;
-        if (left > window.innerWidth - menuHalfWidth - 10) left = window.innerWidth - menuHalfWidth - 10;
 
+        menu.style.flexDirection = flexDir;
         menu.style.top = `${top}px`;
         menu.style.left = `${left}px`;
+        menu.style.transform = transform;
     }
 
     function placeMinesSafe(firstR, firstC) {
@@ -596,7 +623,6 @@ minesweeper_html = """
     }
 
     window.onload = () => {
-        // 첫 화면 진입 시 창 크기나 기기 정보로 모바일 환경 자동 판별!
         if (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent)) {
             isMobileMode = true;
         }
