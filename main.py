@@ -103,7 +103,7 @@ minesweeper_html = """
         animation: popUp 0.15s ease-out forwards;
     }
     .mobile-btn {
-        width: 40px; height: 40px; border-radius: 50%; border: none; font-size: 20px;
+        width: 45px; height: 45px; border-radius: 50%; border: none; font-size: 22px;
         background-color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
         touch-action: manipulation;
     }
@@ -197,6 +197,8 @@ minesweeper_html = """
 
     let board = []; let currentLevel; let isGameOver = false; let isFirstClick = true; 
     let flagsPlaced = 0; let timerInterval = null; let seconds = 0;
+    
+    // 🚨 첫 로드 시 화면 크기나 기기 정보로 모바일 모드 자동 감지!
     let isMobileMode = false; 
     let activeMenuCell = null; 
     
@@ -216,30 +218,38 @@ minesweeper_html = """
         closeMobileMenu();
     });
 
-    function toggleDeviceMode() {
+    function toggleDeviceMode(showAlert = true) {
         isMobileMode = !isMobileMode;
         document.getElementById('btn-mode').innerText = isMobileMode ? '📱 모바일 모드' : '💻 PC 모드';
         document.getElementById('btn-mode').style.backgroundColor = isMobileMode ? '#e91e63' : '#9c27b0';
         
-        alert("모드가 변경되어 게임이 다시 시작됩니다! 🔄");
-        initGame(); 
+        if (showAlert) {
+            alert("모드가 변경되어 게임이 다시 시작됩니다! 🔄");
+            initGame(); 
+        }
     }
 
     async function saveScore(autoName = null) {
         let name = autoName || document.getElementById('player-name').value.trim() || "이름없는고수";
         if (!autoName) {
-            currentNickname = name;
+            currentNickname = name; // 내 기기에는 순수 닉네임만 저장
             try { localStorage.setItem('minesweeper_nickname', name); } catch(e) {}
         }
+        
         let saveBtn = document.getElementById('save-btn');
         saveBtn.innerText = "서버에 저장 중... 📡"; saveBtn.disabled = true;
-        let actualLevelId = isMobileMode ? `${currentLevel.id}_mobile` : currentLevel.id;
+        
+        // 🚨 시트 이름은 그대로 두고, 닉네임 뒤에 몰래 태그를 붙여서 서버로 전송 (구글 시트 에러 방지)
+        let platformTag = isMobileMode ? "📱" : "💻";
+        let taggedName = name + platformTag; 
+
         try {
-            let url = `${SCRIPT_URL}?action=write&level=${actualLevelId}&name=${encodeURIComponent(name)}&time=${seconds}`;
+            let url = `${SCRIPT_URL}?action=write&level=${currentLevel.id}&name=${encodeURIComponent(taggedName)}&time=${seconds}`;
             await fetch(url);
         } catch (error) {
             console.error(error); alert("서버 연결에 실패했습니다.");
         }
+        
         saveBtn.innerText = "랭킹 등록"; saveBtn.disabled = false;
         closeModal('name-modal'); 
         currentRankPlatform = isMobileMode ? 'mobile' : 'pc'; 
@@ -271,13 +281,20 @@ minesweeper_html = """
         document.getElementById(`tab-${diffId}`).classList.add('active');
         if (!globalRanksCache) return;
         
-        let targetKey = currentRankPlatform === 'pc' ? diffId : `${diffId}_mobile`;
-        let ranks = globalRanksCache[targetKey] || [];
+        let ranks = globalRanksCache[diffId] || []; // 이제 시트 탭은 난이도별 3개만 사용함
+        
+        // 🚨 프론트엔드에서 태그를 확인해서 PC/모바일 분리! (과거 기록은 태그가 없으므로 PC로 간주)
+        let filteredRanks = ranks.filter(entry => {
+            let isMob = entry.name.includes('📱');
+            return currentRankPlatform === 'mobile' ? isMob : !isMob;
+        });
         
         let bestRecords = {};
-        ranks.forEach(entry => {
-            if (!bestRecords[entry.name] || bestRecords[entry.name] > entry.time) {
-                bestRecords[entry.name] = entry.time;
+        filteredRanks.forEach(entry => {
+            // 태그를 지우고 순수 닉네임만 추출
+            let cleanName = entry.name.replace('📱', '').replace('💻', '');
+            if (!bestRecords[cleanName] || bestRecords[cleanName] > entry.time) {
+                bestRecords[cleanName] = entry.time;
             }
         });
         
@@ -388,9 +405,12 @@ minesweeper_html = """
         document.getElementById('timer').innerText = `⏱️ 0초`;
         document.getElementById('status').innerText = `🚩 남은 지뢰: ${currentLevel.mines}`;
         
+        // 🚨 모바일 모드일 때는 셀 크기를 1.5배 이상(최소 48px)으로 확 키워서 터치하기 쉽게 만듦!
+        let finalCellSize = isMobileMode ? Math.max(currentLevel.cellSize * 1.5, 48) : currentLevel.cellSize;
+
         const boardEl = document.getElementById('board');
-        boardEl.style.gridTemplateColumns = `repeat(${currentLevel.cols}, ${currentLevel.cellSize}px)`;
-        boardEl.style.setProperty('--cell-border', `${Math.max(2, Math.floor(currentLevel.cellSize * 0.12))}px`);
+        boardEl.style.gridTemplateColumns = `repeat(${currentLevel.cols}, ${finalCellSize}px)`;
+        boardEl.style.setProperty('--cell-border', `${Math.max(2, Math.floor(finalCellSize * 0.12))}px`);
         boardEl.innerHTML = '';
 
         for (let r = 0; r < currentLevel.rows; r++) {
@@ -398,8 +418,8 @@ minesweeper_html = """
             for (let c = 0; c < currentLevel.cols; c++) {
                 let cell = { r, c, isMine: false, isRevealed: false, isFlagged: false, neighborMines: 0 }; row.push(cell);
                 let cellEl = document.createElement('div'); cellEl.className = 'cell'; cellEl.id = `cell-${r}-${c}`;
-                cellEl.style.width = cellEl.style.height = `${currentLevel.cellSize}px`;
-                cellEl.style.fontSize = `${currentLevel.cellSize * 0.55}px`; 
+                cellEl.style.width = cellEl.style.height = `${finalCellSize}px`;
+                cellEl.style.fontSize = `${finalCellSize * 0.55}px`; 
                 
                 cellEl.addEventListener('click', (e) => handleInteraction(e, r, c));
                 cellEl.addEventListener('contextmenu', (e) => {
@@ -438,8 +458,6 @@ minesweeper_html = """
         }
 
         let cell = board[r][c];
-        
-        // 🚨 핵심 수정 부분: 이미 열린 블럭을 눌렀을 때 팝업창 닫기!
         if (cell.isRevealed) {
             closeMobileMenu(); 
             return;
@@ -471,14 +489,14 @@ minesweeper_html = """
         let cellEl = document.getElementById(`cell-${r}-${c}`);
         let rect = cellEl.getBoundingClientRect();
         
-        let top = rect.top + window.scrollY - 55; 
+        let top = rect.top + window.scrollY - 65; 
         let left = rect.left + window.scrollX + (rect.width / 2); 
 
-        if (rect.top < 60) {
+        if (rect.top < 70) {
             top = rect.bottom + window.scrollY + 10; 
         }
         
-        let menuHalfWidth = 50; 
+        let menuHalfWidth = 55; 
         if (left < menuHalfWidth + 10) left = menuHalfWidth + 10;
         if (left > window.innerWidth - menuHalfWidth - 10) left = window.innerWidth - menuHalfWidth - 10;
 
@@ -577,7 +595,15 @@ minesweeper_html = """
         if (revealedCount === (currentLevel.rows * currentLevel.cols) - currentLevel.mines) gameOver(true);
     }
 
-    window.onload = initGame;
+    window.onload = () => {
+        // 첫 화면 진입 시 창 크기나 기기 정보로 모바일 환경 자동 판별!
+        if (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent)) {
+            isMobileMode = true;
+        }
+        document.getElementById('btn-mode').innerText = isMobileMode ? '📱 모바일 모드' : '💻 PC 모드';
+        document.getElementById('btn-mode').style.backgroundColor = isMobileMode ? '#e91e63' : '#9c27b0';
+        initGame();
+    };
 </script>
 </body>
 </html>
