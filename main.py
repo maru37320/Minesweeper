@@ -1,134 +1,141 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# --- 페이지 설정 ---
-st.set_page_config(page_title="클래식 지뢰찾기", page_icon="💣", layout="wide")
+st.set_page_config(page_title="궁극의 지뢰찾기", page_icon="💣", layout="wide")
 
-st.title("💣 리얼 클래식 지뢰찾기")
-st.markdown("**좌클릭:** 탐색 | **우클릭:** 깃발 꽂기 | **좌+우 동시클릭(양클릭):** 주변 8칸 한 번에 열기")
+st.title("💣 궁극의 클래식 지뢰찾기 (풀옵션)")
+st.markdown("**좌클릭:** 탐색 | **우클릭:** 깃발 | **좌+우 동시클릭:** 주변 열기 | **힌트 사용 시 기록 +15초 페널티!**")
 
-# --- HTML/JS/CSS 지뢰찾기 구현 ---
 minesweeper_html = """
 <!DOCTYPE html>
 <html>
 <head>
 <style>
+    /* 🎨 테마 설정 (CSS 변수 활용) */
+    :root {
+        --bg-color: #f0f2f6;
+        --panel-bg: white;
+        --text-color: #333;
+        --board-bg: #9e9e9e;
+        --cell-bg: #c0c0c0;
+        --cell-border-light: #ffffff;
+        --cell-border-dark: #808080;
+        --cell-revealed-bg: #e8ecef;
+        --cell-revealed-border: #9e9e9e;
+        --btn-bg: #ffffff;
+        --btn-hover: #e9ecef;
+    }
+    body.theme-dark {
+        --bg-color: #121212;
+        --panel-bg: #2d2d2d;
+        --text-color: #e0e0e0;
+        --board-bg: #222;
+        --cell-bg: #444;
+        --cell-border-light: #666;
+        --cell-border-dark: #111;
+        --cell-revealed-bg: #333;
+        --cell-revealed-border: #222;
+        --btn-bg: #444;
+        --btn-hover: #555;
+    }
+    body.theme-retro {
+        --bg-color: #008080; /* 윈도우 98 배경색 */
+        --panel-bg: #c0c0c0;
+        --text-color: #000000;
+        --board-bg: #c0c0c0;
+        --cell-bg: #c0c0c0;
+        --cell-border-light: #ffffff;
+        --cell-border-dark: #808080;
+        --cell-revealed-bg: #c0c0c0;
+        --cell-revealed-border: #808080;
+        --btn-bg: #c0c0c0;
+        --btn-hover: #d4d4d4;
+        font-family: 'MS Sans Serif', Tahoma, sans-serif !important;
+    }
+
     body {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background-color: #f0f2f6; 
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 20px;
-        user-select: none;
-        margin: 0;
+        background-color: var(--bg-color); 
+        color: var(--text-color);
+        display: flex; flex-direction: column; align-items: center;
+        padding: 20px; margin: 0; user-select: none;
+        transition: background-color 0.3s, color 0.3s;
     }
     
-    #controls {
-        background-color: white;
-        padding: 15px 25px;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        margin-bottom: 25px;
-        display: flex;
-        gap: 20px;
-        align-items: center;
+    .toolbar {
+        background-color: var(--panel-bg);
+        padding: 15px 25px; border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        margin-bottom: 15px; display: flex; gap: 15px; align-items: center;
+        flex-wrap: wrap; justify-content: center;
     }
     select, button {
-        padding: 8px 15px;
-        font-size: 16px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        cursor: pointer;
-        background-color: #ffffff;
+        padding: 8px 15px; font-size: 16px; font-weight: bold;
+        border: 2px solid var(--cell-border-dark); border-radius: 5px;
+        cursor: pointer; background-color: var(--btn-bg); color: var(--text-color);
         transition: 0.2s;
-        font-weight: bold;
     }
-    button:hover, select:hover { background-color: #e9ecef; }
-    #btn-ranking { background-color: #ffca28; border-color: #ffb300; }
+    button:hover, select:hover { background-color: var(--btn-hover); }
+    
+    #btn-ranking { background-color: #ffca28; color: #333; border-color: #ffb300; }
     #btn-ranking:hover { background-color: #ffb300; }
+    #btn-hint { background-color: #4caf50; color: white; border-color: #388e3c; }
+    #btn-hint:hover { background-color: #43a047; }
 
     .info-text { font-weight: bold; font-size: 18px; }
     #status { color: #d32f2f; min-width: 120px; text-align: center; }
     #timer { color: #1976d2; min-width: 100px; text-align: center; }
+    body.theme-dark #status { color: #ff6b6b; }
+    body.theme-dark #timer { color: #64b5f6; }
 
     #board {
         --cell-border: 3px; 
-        display: grid;
-        background-color: #9e9e9e; 
-        border: 4px solid #808080;
-        border-top-color: #ffffff;
-        border-left-color: #ffffff;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        display: grid; background-color: var(--board-bg); 
+        border: 4px solid var(--cell-border-dark);
+        border-top-color: var(--cell-border-light);
+        border-left-color: var(--cell-border-light);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.4);
     }
     
     .cell {
-        box-sizing: border-box;
-        background-color: #c0c0c0; 
-        border: var(--cell-border) outset #f4f4f4; 
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        cursor: pointer;
+        box-sizing: border-box; background-color: var(--cell-bg); 
+        border-style: solid; border-width: var(--cell-border);
+        border-color: var(--cell-border-light) var(--cell-border-dark) var(--cell-border-dark) var(--cell-border-light);
+        display: flex; align-items: center; justify-content: center;
+        font-weight: bold; cursor: pointer; transition: background-color 0.1s;
     }
-    
     .cell.revealed {
-        border: 1px solid #9e9e9e;
-        background-color: #e8ecef; 
-        box-shadow: inset 1px 1px 3px rgba(0,0,0,0.1); 
+        border: 1px solid var(--cell-revealed-border);
+        background-color: var(--cell-revealed-bg); 
+        box-shadow: inset 1px 1px 3px rgba(0,0,0,0.2); 
     }
     
     .num-1 { color: #0000ff; } .num-2 { color: #008000; } .num-3 { color: #ff0000; }
     .num-4 { color: #000080; } .num-5 { color: #800000; } .num-6 { color: #008080; }
-    .num-7 { color: #000000; } .num-8 { color: #808080; }
+    body.theme-dark .num-1 { color: #64b5f6; } body.theme-dark .num-2 { color: #81c784; } 
+    body.theme-dark .num-3 { color: #e57373; } body.theme-dark .num-4 { color: #9575cd; }
 
-    /* 모달 (팝업창) 디자인 */
-    .modal-overlay {
-        display: none; 
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background-color: rgba(0, 0, 0, 0.6);
-        z-index: 1000;
-        justify-content: center; align-items: center;
-    }
-    .modal-content {
-        background-color: white; padding: 30px; border-radius: 12px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-        text-align: center; min-width: 400px; max-height: 80vh; overflow-y: auto;
-    }
-    .modal-content h2 { margin-top: 0; color: #333; }
-    .modal-content input {
-        width: 80%; padding: 10px; margin: 15px 0; font-size: 16px;
-        border: 2px solid #ccc; border-radius: 5px; text-align: center;
-    }
+    /* 모달 디자인 (생략 없이 유지) */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center; }
+    .modal-content { background-color: var(--panel-bg); color: var(--text-color); padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; min-width: 450px; }
+    .modal-content input { width: 80%; padding: 10px; margin: 15px 0; font-size: 16px; border: 2px solid #ccc; border-radius: 5px; text-align: center; }
     .modal-btn { background-color: #1976d2; color: white; border: none; }
-    .modal-btn:hover { background-color: #115293; }
     .close-btn { background-color: #d32f2f; color: white; border: none; margin-top: 20px; }
-    .close-btn:hover { background-color: #9a0007; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border-bottom: 1px solid #777; padding: 10px; text-align: center; }
+    
+    .tab-container { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
+    .tab-btn { padding: 8px 16px; border: none; background-color: #888; color: white; }
+    .tab-btn.active { background-color: #1976d2; }
+    .reset-btn { background-color: #ffccbc; color: #d84315; margin-left: auto; }
 
-    /* 랭킹 탭 버튼 디자인 */
-    .tab-container {
-        display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;
-    }
-    .tab-btn {
-        padding: 8px 20px; border: none; border-radius: 5px; cursor: pointer;
-        font-weight: bold; background-color: #e0e0e0; color: #333; transition: 0.2s;
-    }
-    .tab-btn:hover { background-color: #d5d5d5; }
-    .tab-btn.active { background-color: #1976d2; color: white; } /* 선택된 탭 강조 */
-
-    /* 랭킹 테이블 디자인 */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-    th, td { border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: center; }
-    th { background-color: #f2f2f2; color: #333; font-size: 15px; }
-    .rank-1 { font-weight: bold; color: #d4af37; background-color: #fffdf5; } 
-    .rank-2 { font-weight: bold; color: #a0a0a0; background-color: #fafafa; } 
-    .rank-3 { font-weight: bold; color: #cd7f32; background-color: #fffaf5; } 
+    /* 폭죽 애니메이션용 클래스 */
+    .confetti { position: fixed; z-index: 9999; pointer-events: none; }
 </style>
 </head>
-<body>
+<body class="theme-light">
 
-<div id="controls">
+<div class="toolbar">
     <select id="difficulty" onchange="initGame()">
         <option value="beginner">초급 (9x9)</option>
         <option value="intermediate">중급 (16x16)</option>
@@ -140,12 +147,22 @@ minesweeper_html = """
     <div id="timer" class="info-text">⏱️ 0초</div>
 </div>
 
+<div class="toolbar" style="padding: 10px 25px;">
+    <select id="theme-selector" onchange="changeTheme()">
+        <option value="theme-light">☀️ 라이트 모드</option>
+        <option value="theme-dark">🌙 다크 모드</option>
+        <option value="theme-retro">💻 레트로(Win98)</option>
+    </select>
+    <button id="btn-sound" onclick="toggleSound()">🔊 소리 켜짐</button>
+    <button id="btn-hint" onclick="useHint()">💡 힌트 (+15초)</button>
+</div>
+
 <div id="board"></div>
 
 <div id="name-modal" class="modal-overlay">
     <div class="modal-content">
         <h2>🎉 지뢰찾기 클리어! 🎉</h2>
-        <p id="clear-record" class="info-text" style="color: #1976d2;"></p>
+        <p id="clear-record" class="info-text" style="color: #4caf50;"></p>
         <p>명예의 전당에 등록할 닉네임을 입력하세요!</p>
         <input type="text" id="player-name" placeholder="닉네임 (최대 10자)" maxlength="10">
         <br>
@@ -156,13 +173,12 @@ minesweeper_html = """
 <div id="ranking-modal" class="modal-overlay">
     <div class="modal-content">
         <h2>🏆 명예의 전당</h2>
-        
         <div class="tab-container">
             <button id="tab-beginner" class="tab-btn" onclick="renderRankingTable('beginner')">초급</button>
             <button id="tab-intermediate" class="tab-btn" onclick="renderRankingTable('intermediate')">중급</button>
             <button id="tab-expert" class="tab-btn" onclick="renderRankingTable('expert')">고급</button>
+            <button class="tab-btn reset-btn" onclick="resetNickname()">👤 이름 초기화</button>
         </div>
-
         <div id="ranking-boards"></div>
         <button class="close-btn" onclick="closeModal('ranking-modal')">닫기</button>
     </div>
@@ -170,7 +186,7 @@ minesweeper_html = """
 
 <script>
     const levels = {
-        beginner: { id: 'beginner', name: '초급', rows: 9, cols: 9, mines: 10, cellSize: 50 },       
+        beginner: { id: 'beginner', name: '초급', rows: 9, cols: 9, mines: 10, cellSize: 45 },       
         intermediate: { id: 'intermediate', name: '중급', rows: 16, cols: 16, mines: 40, cellSize: 35 }, 
         expert: { id: 'expert', name: '고급', rows: 16, cols: 30, mines: 99, cellSize: 35 } 
     };
@@ -182,116 +198,189 @@ minesweeper_html = """
     let flagsPlaced = 0;
     let timerInterval = null;
     let seconds = 0;
+    let currentNickname = null;
+    
+    // --- 🎵 사운드 시스템 (Web Audio API) ---
+    let audioCtx = null;
+    let soundEnabled = true;
 
-    // --- 랭킹 시스템 로직 ---
+    function toggleSound() {
+        soundEnabled = !soundEnabled;
+        document.getElementById('btn-sound').innerText = soundEnabled ? '🔊 소리 켜짐' : '🔇 소리 꺼짐';
+        if (soundEnabled && !audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
+    function playSound(type) {
+        if (!soundEnabled) return;
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        let now = audioCtx.currentTime;
+
+        if (type === 'reveal') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(800, now);
+            gain.gain.setValueAtTime(0.05, now); gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+            osc.start(now); osc.stop(now + 0.1);
+        } else if (type === 'flag') {
+            osc.type = 'square'; osc.frequency.setValueAtTime(400, now);
+            gain.gain.setValueAtTime(0.05, now); gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+            osc.start(now); osc.stop(now + 0.1);
+        } else if (type === 'bomb') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(10, now + 0.5);
+            gain.gain.setValueAtTime(0.2, now); gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+            osc.start(now); osc.stop(now + 0.5);
+        } else if (type === 'win') {
+            // 승리 팡파르 (단화음 아르페지오)
+            [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                let o = audioCtx.createOscillator(); let g = audioCtx.createGain();
+                o.type = 'sine'; o.frequency.value = freq;
+                o.connect(g); g.connect(audioCtx.destination);
+                g.gain.setValueAtTime(0.1, now + i*0.1); g.gain.exponentialRampToValueAtTime(0.001, now + i*0.1 + 0.3);
+                o.start(now + i*0.1); o.stop(now + i*0.1 + 0.3);
+            });
+        }
+    }
+
+    // --- 🎨 테마 및 폭죽 시스템 ---
+    function changeTheme() {
+        document.body.className = document.getElementById('theme-selector').value;
+    }
+
+    function fireConfetti() {
+        const emojis = ['🎉', '✨', '🏆', '🎊', '💣'];
+        for (let i = 0; i < 60; i++) {
+            let conf = document.createElement('div');
+            conf.className = 'confetti';
+            conf.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+            conf.style.left = Math.random() * 100 + 'vw';
+            conf.style.top = '-50px';
+            conf.style.fontSize = (Math.random() * 20 + 15) + 'px';
+            conf.style.transition = 'transform 2.5s ease-in, top 2.5s ease-in, opacity 2.5s ease-in';
+            document.body.appendChild(conf);
+
+            setTimeout(() => {
+                conf.style.top = '100vh';
+                conf.style.transform = `rotate(${Math.random() * 720}deg)`;
+                conf.style.opacity = '0';
+            }, 50);
+            setTimeout(() => conf.remove(), 2500);
+        }
+    }
+
+    // --- 💡 힌트 시스템 ---
+    function useHint() {
+        if (isGameOver || isFirstClick) {
+            alert("게임을 시작한 후(첫 클릭 이후)에 힌트를 사용할 수 있습니다!");
+            return;
+        }
+        let safeCells = [];
+        for (let r = 0; r < currentLevel.rows; r++) {
+            for (let c = 0; c < currentLevel.cols; c++) {
+                if (!board[r][c].isMine && !board[r][c].isRevealed && !board[r][c].isFlagged) {
+                    safeCells.push({r, c});
+                }
+            }
+        }
+        if (safeCells.length > 0) {
+            let pick = safeCells[Math.floor(Math.random() * safeCells.length)];
+            seconds += 15; // 🚨 페널티 부여
+            document.getElementById('timer').innerText = `⏱️ ${seconds}초 (힌트 페널티!)`;
+            
+            let cellEl = document.getElementById(`cell-${pick.r}-${pick.c}`);
+            cellEl.style.backgroundColor = '#ffeb3b'; // 노란색으로 반짝!
+            playSound('reveal');
+            
+            setTimeout(() => {
+                revealCell(pick.r, pick.c);
+            }, 400);
+        }
+    }
+
+    // --- 기존 지뢰찾기 시스템 ---
     function getRanks() {
         let ranks = localStorage.getItem('minesweeper_ranks');
         if (ranks) return JSON.parse(ranks);
         return { beginner: [], intermediate: [], expert: [] };
     }
 
-    function saveScore() {
-        let name = document.getElementById('player-name').value.trim();
-        if (!name) name = "이름없는고수";
+    function saveScore(autoName = null) {
+        let name = autoName || document.getElementById('player-name').value.trim() || "이름없는고수";
+        if (!autoName) currentNickname = name; 
         
         let ranks = getRanks();
-        ranks[currentLevel.id].push({ name: name, time: seconds });
+        let existingIndex = ranks[currentLevel.id].findIndex(r => r.name === name);
+        
+        if (existingIndex !== -1) {
+            if (seconds < ranks[currentLevel.id][existingIndex].time) {
+                ranks[currentLevel.id][existingIndex].time = seconds;
+            }
+        } else {
+            ranks[currentLevel.id].push({ name: name, time: seconds });
+        }
+        
         ranks[currentLevel.id].sort((a, b) => a.time - b.time);
         ranks[currentLevel.id] = ranks[currentLevel.id].slice(0, 10);
-        
         localStorage.setItem('minesweeper_ranks', JSON.stringify(ranks));
         
-        closeModal('name-modal');
-        showRanking(); 
+        closeModal('name-modal'); showRanking(); 
     }
 
-    // 랭킹 모달 열기 (기본값으로 현재 플레이 중인 난이도를 보여줌)
-    function showRanking() {
-        document.getElementById('ranking-modal').style.display = 'flex';
-        renderRankingTable(currentLevel.id);
-    }
+    function resetNickname() { currentNickname = null; alert("닉네임이 초기화되었습니다."); }
 
-    // 💡 선택한 난이도의 랭킹만 테이블로 그려주는 함수
+    function showRanking() { document.getElementById('ranking-modal').style.display = 'flex'; renderRankingTable(currentLevel.id); }
+
     function renderRankingTable(diffId) {
-        // 탭 버튼 활성화 디자인 처리
-        ['beginner', 'intermediate', 'expert'].forEach(id => {
-            document.getElementById(`tab-${id}`).classList.remove('active');
-        });
+        ['beginner', 'intermediate', 'expert'].forEach(id => document.getElementById(`tab-${id}`).classList.remove('active'));
         document.getElementById(`tab-${diffId}`).classList.add('active');
 
-        let ranks = getRanks();
-        let html = `<h3>[ ${levels[diffId].name} ]</h3>`;
-        html += `<table><tr><th width="25%">순위</th><th width="45%">닉네임</th><th width="30%">기록</th></tr>`;
+        let ranks = getRanks()[diffId];
+        let html = `<h3>[ ${levels[diffId].name} ]</h3><table><tr><th>순위</th><th>닉네임</th><th>기록</th></tr>`;
         
-        let data = ranks[diffId];
-        if (data.length === 0) {
-            html += `<tr><td colspan="3" style="color:#777; padding: 20px;">아직 기록이 없습니다.<br>첫 번째 기록의 주인공이 되세요!</td></tr>`;
+        if (ranks.length === 0) {
+            html += `<tr><td colspan="3">기록이 없습니다.</td></tr>`;
         } else {
-            data.forEach((entry, idx) => {
-                let rankClass = "";
-                let medal = idx + 1;
-                if (idx === 0) { rankClass = "rank-1"; medal = "🥇 1위"; }
-                else if (idx === 1) { rankClass = "rank-2"; medal = "🥈 2위"; }
-                else if (idx === 2) { rankClass = "rank-3"; medal = "🥉 3위"; }
-                else { medal = `${idx + 1}위`; }
-                
-                html += `<tr class="${rankClass}">
-                            <td>${medal}</td>
-                            <td>${entry.name}</td>
-                            <td>${entry.time}초</td>
-                         </tr>`;
+            ranks.forEach((entry, idx) => {
+                let medal = idx === 0 ? "🥇 1위" : idx === 1 ? "🥈 2위" : idx === 2 ? "🥉 3위" : `${idx + 1}위`;
+                let style = idx === 0 ? "font-weight:bold; color:#d4af37;" : "";
+                html += `<tr style="${style}"><td>${medal}</td><td>${entry.name}</td><td>${entry.time}초</td></tr>`;
             });
         }
-        html += `</table>`;
-        
-        document.getElementById('ranking-boards').innerHTML = html;
+        document.getElementById('ranking-boards').innerHTML = html + `</table>`;
     }
 
-    function closeModal(modalId) {
-        document.getElementById(modalId).style.display = 'none';
-    }
-    // ------------------------
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
     function initGame() {
         const diff = document.getElementById('difficulty').value;
-        currentLevel = levels[diff];
-        board = [];
-        isGameOver = false;
-        isFirstClick = true;
-        flagsPlaced = 0;
+        currentLevel = levels[diff]; board = []; isGameOver = false; isFirstClick = true; flagsPlaced = 0;
         
-        stopTimer();
-        seconds = 0;
+        stopTimer(); seconds = 0;
         document.getElementById('timer').innerText = `⏱️ 0초`;
-        
         document.getElementById('status').innerText = `🚩 남은 지뢰: ${currentLevel.mines}`;
-        document.getElementById('status').style.color = "#d32f2f";
         
         const boardEl = document.getElementById('board');
         boardEl.style.gridTemplateColumns = `repeat(${currentLevel.cols}, ${currentLevel.cellSize}px)`;
-        
-        const borderSize = Math.max(2, Math.floor(currentLevel.cellSize * 0.12));
-        boardEl.style.setProperty('--cell-border', `${borderSize}px`);
-        
+        boardEl.style.setProperty('--cell-border', `${Math.max(2, Math.floor(currentLevel.cellSize * 0.12))}px`);
         boardEl.innerHTML = '';
 
         for (let r = 0; r < currentLevel.rows; r++) {
             let row = [];
             for (let c = 0; c < currentLevel.cols; c++) {
-                let cell = { r: r, c: c, isMine: false, isRevealed: false, isFlagged: false, neighborMines: 0 };
+                let cell = { r, c, isMine: false, isRevealed: false, isFlagged: false, neighborMines: 0 };
                 row.push(cell);
-
                 let cellEl = document.createElement('div');
-                cellEl.className = 'cell';
-                cellEl.id = `cell-${r}-${c}`;
-                
-                cellEl.style.width = `${currentLevel.cellSize}px`;
-                cellEl.style.height = `${currentLevel.cellSize}px`;
+                cellEl.className = 'cell'; cellEl.id = `cell-${r}-${c}`;
+                cellEl.style.width = cellEl.style.height = `${currentLevel.cellSize}px`;
                 cellEl.style.fontSize = `${currentLevel.cellSize * 0.55}px`; 
                 
                 cellEl.addEventListener('mousedown', (e) => handleMouseDown(e, r, c));
-                cellEl.addEventListener('contextmenu', (e) => { e.preventDefault(); });
-
+                cellEl.addEventListener('contextmenu', (e) => e.preventDefault());
                 boardEl.appendChild(cellEl);
             }
             board.push(row);
@@ -300,61 +389,34 @@ minesweeper_html = """
 
     function startTimer() {
         if (timerInterval !== null) return;
-        timerInterval = setInterval(() => {
-            seconds++;
-            document.getElementById('timer').innerText = `⏱️ ${seconds}초`;
-        }, 1000);
+        // 오디오 컨텍스트 초기화 (브라우저 정책 우회용)
+        if (soundEnabled && !audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        timerInterval = setInterval(() => { seconds++; document.getElementById('timer').innerText = `⏱️ ${seconds}초`; }, 1000);
     }
-
-    function stopTimer() {
-        if (timerInterval !== null) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-        }
-    }
+    function stopTimer() { if (timerInterval) clearInterval(timerInterval); timerInterval = null; }
 
     function handleMouseDown(e, r, c) {
         if (isGameOver) return;
-        
-        if (e.buttons === 3) {
-            handleChording(r, c);
-            return;
-        }
-
-        if (e.button === 2) {
-            toggleFlag(r, c);
-        } else if (e.button === 0) {
-            revealCell(r, c);
-        }
+        if (e.buttons === 3) { handleChording(r, c); return; }
+        if (e.button === 2) { toggleFlag(r, c); } 
+        else if (e.button === 0) { revealCell(r, c); }
     }
 
     function placeMinesSafe(firstR, firstC) {
         let placed = 0;
         while (placed < currentLevel.mines) {
-            let r = Math.floor(Math.random() * currentLevel.rows);
-            let c = Math.floor(Math.random() * currentLevel.cols);
-            let isSafeZone = Math.abs(r - firstR) <= 1 && Math.abs(c - firstC) <= 1;
-            
-            if (!board[r][c].isMine && !isSafeZone) {
-                board[r][c].isMine = true;
-                placed++;
+            let r = Math.floor(Math.random() * currentLevel.rows), c = Math.floor(Math.random() * currentLevel.cols);
+            if (!board[r][c].isMine && (Math.abs(r - firstR) > 1 || Math.abs(c - firstC) > 1)) {
+                board[r][c].isMine = true; placed++;
             }
         }
-        calculateNumbers();
-    }
-
-    function calculateNumbers() {
         for (let r = 0; r < currentLevel.rows; r++) {
             for (let c = 0; c < currentLevel.cols; c++) {
                 if (board[r][c].isMine) continue;
                 let count = 0;
-                for (let i = -1; i <= 1; i++) {
-                    for (let j = -1; j <= 1; j++) {
-                        let nr = r + i, nc = c + j;
-                        if (nr >= 0 && nr < currentLevel.rows && nc >= 0 && nc < currentLevel.cols) {
-                            if (board[nr][nc].isMine) count++;
-                        }
-                    }
+                for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+                    let nr = r + i, nc = c + j;
+                    if (nr >= 0 && nr < currentLevel.rows && nc >= 0 && nc < currentLevel.cols && board[nr][nc].isMine) count++;
                 }
                 board[r][c].neighborMines = count;
             }
@@ -363,130 +425,80 @@ minesweeper_html = """
 
     function revealCell(r, c) {
         if (r < 0 || r >= currentLevel.rows || c < 0 || c >= currentLevel.cols) return;
-        let cell = board[r][c];
-        if (cell.isRevealed || cell.isFlagged || isGameOver) return;
+        let cell = board[r][c]; if (cell.isRevealed || cell.isFlagged || isGameOver) return;
 
-        if (isFirstClick) {
-            placeMinesSafe(r, c);
-            startTimer();
-            isFirstClick = false;
-        }
-
+        if (isFirstClick) { placeMinesSafe(r, c); startTimer(); isFirstClick = false; }
         cell.isRevealed = true;
+        
         let cellEl = document.getElementById(`cell-${r}-${c}`);
         cellEl.classList.add('revealed');
+        cellEl.style.backgroundColor = ''; // 힌트로 바뀐 색상 원상복구
 
         if (cell.isMine) {
-            cellEl.innerText = '💣';
-            cellEl.style.backgroundColor = '#ff4d4d';
-            gameOver(false);
-            return;
+            playSound('bomb');
+            cellEl.innerText = '💣'; cellEl.style.backgroundColor = '#ff4d4d';
+            gameOver(false); return;
         }
 
+        playSound('reveal');
         if (cell.neighborMines > 0) {
-            cellEl.innerText = cell.neighborMines;
-            cellEl.classList.add(`num-${cell.neighborMines}`);
+            cellEl.innerText = cell.neighborMines; cellEl.classList.add(`num-${cell.neighborMines}`);
         } else {
-            for (let i = -1; i <= 1; i++) {
-                for (let j = -1; j <= 1; j++) {
-                    revealCell(r + i, c + j);
-                }
-            }
+            for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) revealCell(r + i, c + j);
         }
         checkWin();
     }
 
     function toggleFlag(r, c) {
-        let cell = board[r][c];
-        if (cell.isRevealed || isGameOver) return;
-
+        let cell = board[r][c]; if (cell.isRevealed || isGameOver) return;
         let cellEl = document.getElementById(`cell-${r}-${c}`);
-        if (cell.isFlagged) {
-            cell.isFlagged = false;
-            cellEl.innerText = '';
-            flagsPlaced--;
-        } else {
-            cell.isFlagged = true;
-            cellEl.innerText = '🚩';
-            flagsPlaced++;
-        }
+        if (cell.isFlagged) { cell.isFlagged = false; cellEl.innerText = ''; flagsPlaced--; playSound('reveal'); } 
+        else { cell.isFlagged = true; cellEl.innerText = '🚩'; flagsPlaced++; playSound('flag'); }
         document.getElementById('status').innerText = `🚩 남은 지뢰: ${currentLevel.mines - flagsPlaced}`;
     }
 
     function handleChording(r, c) {
-        if (isGameOver) return;
-        let cell = board[r][c];
-        
-        if (!cell.isRevealed || cell.neighborMines === 0) return;
-
+        let cell = board[r][c]; if (isGameOver || !cell.isRevealed || cell.neighborMines === 0) return;
         let flagCount = 0;
-        for (let i = -1; i <= 1; i++) {
-            for (let j = -1; j <= 1; j++) {
-                let nr = r + i, nc = c + j;
-                if (nr >= 0 && nr < currentLevel.rows && nc >= 0 && nc < currentLevel.cols) {
-                    if (board[nr][nc].isFlagged) flagCount++;
-                }
-            }
+        for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+            let nr = r + i, nc = c + j;
+            if (nr >= 0 && nr < currentLevel.rows && nc >= 0 && nc < currentLevel.cols && board[nr][nc].isFlagged) flagCount++;
         }
-
         if (flagCount === cell.neighborMines) {
-            for (let i = -1; i <= 1; i++) {
-                for (let j = -1; j <= 1; j++) {
-                    let nr = r + i, nc = c + j;
-                    if (nr >= 0 && nr < currentLevel.rows && nc >= 0 && nc < currentLevel.cols) {
-                        if (!board[nr][nc].isFlagged && !board[nr][nc].isRevealed) {
-                            revealCell(nr, nc);
-                        }
-                    }
-                }
+            for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+                let nr = r + i, nc = c + j;
+                if (nr >= 0 && nr < currentLevel.rows && nc >= 0 && nc < currentLevel.cols && !board[nr][nc].isFlagged && !board[nr][nc].isRevealed) revealCell(nr, nc);
             }
         }
     }
 
     function gameOver(win) {
-        isGameOver = true;
-        stopTimer();
-        
+        isGameOver = true; stopTimer();
         if (win) {
+            playSound('win');
+            fireConfetti();
             document.getElementById('status').innerText = "🎉 승리! 🎉";
-            document.getElementById('status').style.color = "#1976d2";
-            
             setTimeout(() => {
-                document.getElementById('clear-record').innerText = `기록: ${seconds}초 (${currentLevel.name})`;
-                document.getElementById('player-name').value = ''; 
-                document.getElementById('name-modal').style.display = 'flex';
-                document.getElementById('player-name').focus();
-            }, 500);
-
-        } else {
-            document.getElementById('status').innerText = "💥 게임 오버! 💥";
-            document.getElementById('status').style.color = "red";
-            
-            for (let r = 0; r < currentLevel.rows; r++) {
-                for (let c = 0; c < currentLevel.cols; c++) {
-                    if (board[r][c].isMine && !board[r][c].isFlagged) {
-                        let el = document.getElementById(`cell-${r}-${c}`);
-                        el.classList.add('revealed');
-                        el.innerText = '💣';
-                    } else if (!board[r][c].isMine && board[r][c].isFlagged) {
-                        let el = document.getElementById(`cell-${r}-${c}`);
-                        el.innerText = '❌';
-                    }
+                if (currentNickname) saveScore(currentNickname); 
+                else {
+                    document.getElementById('clear-record').innerText = `기록: ${seconds}초`;
+                    document.getElementById('player-name').value = ''; 
+                    document.getElementById('name-modal').style.display = 'flex';
                 }
+            }, 1000);
+        } else {
+            for (let r = 0; r < currentLevel.rows; r++) for (let c = 0; c < currentLevel.cols; c++) {
+                if (board[r][c].isMine && !board[r][c].isFlagged) {
+                    let el = document.getElementById(`cell-${r}-${c}`); el.classList.add('revealed'); el.innerText = '💣';
+                } else if (!board[r][c].isMine && board[r][c].isFlagged) document.getElementById(`cell-${r}-${c}`).innerText = '❌';
             }
         }
     }
 
     function checkWin() {
         let revealedCount = 0;
-        for (let r = 0; r < currentLevel.rows; r++) {
-            for (let c = 0; c < currentLevel.cols; c++) {
-                if (board[r][c].isRevealed) revealedCount++;
-            }
-        }
-        if (revealedCount === (currentLevel.rows * currentLevel.cols) - currentLevel.mines) {
-            gameOver(true);
-        }
+        for (let r = 0; r < currentLevel.rows; r++) for (let c = 0; c < currentLevel.cols; c++) if (board[r][c].isRevealed) revealedCount++;
+        if (revealedCount === (currentLevel.rows * currentLevel.cols) - currentLevel.mines) gameOver(true);
     }
 
     window.onload = initGame;
@@ -495,4 +507,5 @@ minesweeper_html = """
 </html>
 """
 
-components.html(minesweeper_html, height=1000, scrolling=True)
+# HTML 컨테이너 렌더링
+components.html(minesweeper_html, height=
