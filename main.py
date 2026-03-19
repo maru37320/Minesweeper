@@ -216,13 +216,11 @@ minesweeper_html = """
         closeMobileMenu();
     });
 
-    // 🚨 핵심 수정 부분: 모드를 전환할 때마다 initGame()을 호출해서 판을 엎어버림!
     function toggleDeviceMode() {
         isMobileMode = !isMobileMode;
         document.getElementById('btn-mode').innerText = isMobileMode ? '📱 모바일 모드' : '💻 PC 모드';
         document.getElementById('btn-mode').style.backgroundColor = isMobileMode ? '#e91e63' : '#9c27b0';
         
-        // 🚨 유저에게 알리고 게임 초기화!
         alert("모드가 변경되어 게임이 다시 시작됩니다! 🔄");
         initGame(); 
     }
@@ -440,7 +438,12 @@ minesweeper_html = """
         }
 
         let cell = board[r][c];
-        if (cell.isRevealed) return;
+        
+        // 🚨 핵심 수정 부분: 이미 열린 블럭을 눌렀을 때 팝업창 닫기!
+        if (cell.isRevealed) {
+            closeMobileMenu(); 
+            return;
+        }
 
         let existingMenu = document.getElementById('mobile-menu-popup');
         if (existingMenu) {
