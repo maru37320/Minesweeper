@@ -94,27 +94,24 @@ minesweeper_html = """
     body.theme-dark .num-1 { color: #64b5f6; } body.theme-dark .num-2 { color: #81c784; } 
     body.theme-dark .num-3 { color: #e57373; } body.theme-dark .num-4 { color: #9575cd; }
 
-    /* 📱 모바일 팝업 메뉴 */
+    /* 📱 모바일 팝업 메뉴 (개선됨) */
     .mobile-menu {
-        position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+        position: absolute; /* 보드 밖으로 잘리지 않게 body에 붙임 */
         background-color: #333; padding: 6px; border-radius: 8px;
-        display: flex; gap: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 100;
-        animation: popUp 0.2s ease-out forwards;
-    }
-    .mobile-menu::after {
-        content: ''; position: absolute; top: 100%; left: 50%; margin-left: -6px;
-        border-width: 6px; border-style: solid; border-color: #333 transparent transparent transparent;
+        display: flex; gap: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 1000;
+        transform: translateX(-50%); /* 중심 정렬 */
+        animation: popUp 0.15s ease-out forwards;
     }
     .mobile-btn {
-        width: 36px; height: 36px; border-radius: 50%; border: none; font-size: 18px;
+        width: 40px; height: 40px; border-radius: 50%; border: none; font-size: 20px;
         background-color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
         touch-action: manipulation;
     }
     .mobile-btn:active { background-color: #ddd; }
-    @keyframes popUp { from { opacity: 0; transform: translate(-50%, 10px) scale(0.8); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+    @keyframes popUp { from { opacity: 0; transform: translate(-50%, 5px) scale(0.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 
     /* 모달 디자인 */
-    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 2000; justify-content: center; align-items: center; }
     .modal-content { background-color: var(--panel-bg); color: var(--text-color); padding: 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
     .modal-content input { width: 80%; padding: 10px; margin: 15px 0; font-size: 16px; border: 2px solid #ccc; border-radius: 5px; text-align: center; }
     .modal-btn { background-color: #1976d2; color: white; border: none; width: 100%; margin-top: 10px; }
@@ -174,20 +171,16 @@ minesweeper_html = """
 <div id="ranking-modal" class="modal-overlay">
     <div class="modal-content">
         <h2>🌍 글로벌 명예의 전당</h2>
-        
         <div class="tab-container platform-tabs">
             <button id="plat-pc" class="platform-tab active" onclick="changeRankPlatform('pc')">💻 PC 랭킹</button>
             <button id="plat-mobile" class="platform-tab" onclick="changeRankPlatform('mobile')">📱 모바일 랭킹</button>
         </div>
-
         <div class="tab-container">
             <button id="tab-beginner" class="tab-btn active" onclick="renderRankingTable('beginner')">초급</button>
             <button id="tab-intermediate" class="tab-btn" onclick="renderRankingTable('intermediate')">중급</button>
             <button id="tab-expert" class="tab-btn" onclick="renderRankingTable('expert')">고급</button>
         </div>
-        
         <div id="ranking-boards"></div>
-        
         <button class="tab-btn" style="background-color: #ffccbc; color: #d84315; width: 100%; margin-top: 15px;" onclick="resetNickname()">👤 내 닉네임 초기화 (기기 캐시 삭제)</button>
         <button class="close-btn" onclick="closeModal('ranking-modal')">닫기</button>
     </div>
@@ -226,19 +219,15 @@ minesweeper_html = """
             currentNickname = name;
             try { localStorage.setItem('minesweeper_nickname', name); } catch(e) {}
         }
-        
         let saveBtn = document.getElementById('save-btn');
         saveBtn.innerText = "서버에 저장 중... 📡"; saveBtn.disabled = true;
-
         let actualLevelId = isMobileMode ? `${currentLevel.id}_mobile` : currentLevel.id;
-
         try {
             let url = `${SCRIPT_URL}?action=write&level=${actualLevelId}&name=${encodeURIComponent(name)}&time=${seconds}`;
             await fetch(url);
         } catch (error) {
             console.error(error); alert("서버 연결에 실패했습니다.");
         }
-        
         saveBtn.innerText = "랭킹 등록"; saveBtn.disabled = false;
         closeModal('name-modal'); 
         currentRankPlatform = isMobileMode ? 'mobile' : 'pc'; 
@@ -248,7 +237,6 @@ minesweeper_html = """
     async function showRanking() { 
         document.getElementById('ranking-modal').style.display = 'flex'; 
         document.getElementById('ranking-boards').innerHTML = '<h3 style="margin:40px 0; color:#1976d2;">📡 글로벌 랭킹 통신 중...</h3>';
-        
         try {
             let response = await fetch(SCRIPT_URL);
             globalRanksCache = await response.json();
@@ -401,10 +389,13 @@ minesweeper_html = """
                 cellEl.style.width = cellEl.style.height = `${currentLevel.cellSize}px`;
                 cellEl.style.fontSize = `${currentLevel.cellSize * 0.55}px`; 
                 
-                cellEl.addEventListener('mousedown', (e) => handleInteraction(e, r, c));
-                cellEl.addEventListener('touchstart', (e) => handleInteraction(e, r, c), {passive: false});
+                // 터치 겹침 버그를 막기 위해 통합된 click 이벤트 하나만 사용
+                cellEl.addEventListener('click', (e) => handleInteraction(e, r, c));
+                cellEl.addEventListener('contextmenu', (e) => {
+                    e.preventDefault(); 
+                    if (!isMobileMode && !isGameOver) toggleFlag(r, c);
+                });
                 cellEl.addEventListener('dblclick', (e) => { e.preventDefault(); handleChording(r, c); });
-                cellEl.addEventListener('contextmenu', (e) => e.preventDefault());
                 
                 boardEl.appendChild(cellEl);
             }
@@ -419,10 +410,10 @@ minesweeper_html = """
     function stopTimer() { if (timerInterval) clearInterval(timerInterval); timerInterval = null; }
 
     function closeMobileMenu(e) {
-        if (e && e.target.closest('.mobile-menu') || e && e.target.closest('.cell')) return;
-        if (activeMenuCell) {
-            let existingMenu = document.getElementById('mobile-menu-popup');
-            if (existingMenu) existingMenu.remove();
+        if (e && e.target && e.target.closest('.mobile-menu')) return;
+        let existingMenu = document.getElementById('mobile-menu-popup');
+        if (existingMenu) {
+            existingMenu.remove();
             activeMenuCell = null;
         }
     }
@@ -430,55 +421,60 @@ minesweeper_html = """
     function handleInteraction(e, r, c) {
         if (isGameOver) return;
         
-        if (e.target.closest('.mobile-menu')) {
-            e.stopPropagation();
-            return; 
-        }
+        // 🚨 핵심 포인트 1: 이벤트 버블링 차단! 빈 공간을 누른 걸로 오해해서 팝업이 바로 닫히는 걸 막아줌
+        e.stopPropagation(); 
 
         if (!isMobileMode) {
-            if (e.buttons === 3) { handleChording(r, c); return; } 
-            if (e.button === 2) { toggleFlag(r, c); } 
-            else if (e.button === 0) { revealCell(r, c); }
+            if (e.button === 0) revealCell(r, c); 
             return;
         }
 
-        if (e.button === 0 || e.type === 'touchstart') {
-            let cell = board[r][c];
-            if (cell.isRevealed) return;
+        let cell = board[r][c];
+        if (cell.isRevealed) return;
 
-            let existingMenu = document.getElementById('mobile-menu-popup');
-            if (existingMenu) {
-                let isSameCell = activeMenuCell && activeMenuCell.r === r && activeMenuCell.c === c;
-                existingMenu.remove(); activeMenuCell = null;
-                if (isSameCell) return; 
-            }
-
-            let menu = document.createElement('div');
-            menu.id = 'mobile-menu-popup'; menu.className = 'mobile-menu';
-            
-            menu.onmousedown = (ev) => ev.stopPropagation();
-            menu.ontouchstart = (ev) => ev.stopPropagation();
-            
-            let btnDig = document.createElement('button');
-            btnDig.className = 'mobile-btn'; btnDig.innerText = '⛏️';
-            btnDig.onpointerdown = (ev) => { 
-                ev.stopPropagation(); ev.preventDefault(); 
-                closeMobileMenu(); revealCell(r, c); 
-            };
-            
-            let btnFlag = document.createElement('button');
-            btnFlag.className = 'mobile-btn'; btnFlag.innerText = '🚩';
-            btnFlag.onpointerdown = (ev) => { 
-                ev.stopPropagation(); ev.preventDefault(); 
-                closeMobileMenu(); toggleFlag(r, c); 
-            };
-
-            menu.appendChild(btnDig); menu.appendChild(btnFlag);
-            
-            let cellEl = document.getElementById(`cell-${r}-${c}`);
-            cellEl.appendChild(menu);
-            activeMenuCell = {r, c};
+        let existingMenu = document.getElementById('mobile-menu-popup');
+        if (existingMenu) {
+            let isSameCell = activeMenuCell && activeMenuCell.r === r && activeMenuCell.c === c;
+            existingMenu.remove(); activeMenuCell = null;
+            if (isSameCell) return; 
         }
+
+        let menu = document.createElement('div');
+        menu.id = 'mobile-menu-popup'; menu.className = 'mobile-menu';
+        
+        let btnDig = document.createElement('button');
+        btnDig.className = 'mobile-btn'; btnDig.innerText = '⛏️';
+        btnDig.onclick = (ev) => { ev.stopPropagation(); closeMobileMenu(); revealCell(r, c); };
+        
+        let btnFlag = document.createElement('button');
+        btnFlag.className = 'mobile-btn'; btnFlag.innerText = '🚩';
+        btnFlag.onclick = (ev) => { ev.stopPropagation(); closeMobileMenu(); toggleFlag(r, c); };
+
+        menu.appendChild(btnDig); menu.appendChild(btnFlag);
+        
+        // 🚨 핵심 포인트 2: 팝업창을 셀 내부가 아니라 화면 최상위(body)에 붙임! (가려짐 방지)
+        document.body.appendChild(menu);
+        activeMenuCell = {r, c};
+
+        // 🚨 핵심 포인트 3: 셀의 위치를 파악해서 팝업창 좌표를 유동적으로 밀어줌
+        let cellEl = document.getElementById(`cell-${r}-${c}`);
+        let rect = cellEl.getBoundingClientRect();
+        
+        let top = rect.top + window.scrollY - 55; // 기본은 블럭 위쪽
+        let left = rect.left + window.scrollX + (rect.width / 2); // 기본은 블럭 중앙
+
+        // 위쪽 가장자리라면 팝업을 블럭 아래로
+        if (rect.top < 60) {
+            top = rect.bottom + window.scrollY + 10; 
+        }
+        
+        // 좌우 가장자리라면 화면 밖으로 나가지 않게 제한
+        let menuHalfWidth = 50; 
+        if (left < menuHalfWidth + 10) left = menuHalfWidth + 10;
+        if (left > window.innerWidth - menuHalfWidth - 10) left = window.innerWidth - menuHalfWidth - 10;
+
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
     }
 
     function placeMinesSafe(firstR, firstC) {
